@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ page_title }}{% endblock %} | {{ meta.title }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&family=Noto+Serif+TC:wght@400;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/static/css/platform.css" />
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-title">{{ meta.title }}</div>
+          <div class="brand-sub">{{ meta.version }} / {{ meta.build_date }}</div>
+        </div>
+      </div>
+
+      <nav class="nav-block">
+        <div class="nav-label">Pages</div>
+        {% for item in nav_items %}
+          <a href="{{ item.path }}" class="nav-item {% if active == item.id %}active{% endif %}">
+            <span class="nav-code">{{ item.code }}</span>
+            <span>{{ item.label }}</span>
+          </a>
+        {% endfor %}
+      </nav>
+
+      <section class="theme-block">
+        <div class="nav-label">Theme Logic</div>
+        {% for theme in theme_logic %}
+          <div class="theme-note">
+            <div class="theme-note-title">{{ theme.code }} / {{ theme.label }}</div>
+            <div class="theme-note-body">{{ theme.description }}</div>
+          </div>
+        {% endfor %}
+      </section>
+
+      <div class="sidebar-foot">
+        <div>FastAPI + Jinja shell</div>
+        <div>client-side islands for map / chart interactions</div>
+      </div>
+    </aside>
+
+    <div class="app-main">
+      <header class="topbar">
+        <button class="icon-btn mobile-only" id="nav-toggle" type="button">Menu</button>
+        <div>
+          <div class="topbar-crumb">AGRI POLICY DEMO / <strong>{{ page_title }}</strong></div>
+          <div class="topbar-sub">{{ meta.subtitle }}</div>
+        </div>
+        <div class="topbar-meta">
+          <span>Build {{ meta.build_date }}</span>
+          <button class="icon-btn" type="button" onclick="window.print()">Print</button>
+        </div>
+      </header>
+
+      <main class="page-body">
+        <section class="page-intro">
+          <div>
+            <h1>{{ page_title }}</h1>
+            <p>{{ page_subtitle }}</p>
+          </div>
+          <div class="theme-chip-row">
+            {% for theme in theme_logic %}
+              <span class="theme-chip">{{ theme.code }} / {{ theme.label }}</span>
+            {% endfor %}
+          </div>
+        </section>
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const navToggle = document.getElementById("nav-toggle");
+    const sidebar = document.getElementById("sidebar");
+    if (navToggle && sidebar) {
+      navToggle.addEventListener("click", () => sidebar.classList.toggle("open"));
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

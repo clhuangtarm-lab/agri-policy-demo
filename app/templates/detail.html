@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}作物深度頁{% endblock %}
+{% block content %}
+<section class="kpi-row kpi-row-4">
+  <article class="kpi-card">
+    <div class="kpi-label">作物名稱</div>
+    <div class="kpi-value">{{ detail.crop }}</div>
+    <div class="kpi-meta">對應主題一至主題三的 drill-down 入口</div>
+  </article>
+  <article class="kpi-card tone-warn">
+    <div class="kpi-label">高風險占比</div>
+    <div class="kpi-value">{{ "{:.1%}".format(detail.high_risk_ratio) }}</div>
+    <div class="kpi-meta">加權暴露 {{ "{:,.1f}".format(detail.exposure) }}</div>
+  </article>
+  <article class="kpi-card tone-info">
+    <div class="kpi-label">有效登記農藥</div>
+    <div class="kpi-value">{{ "{:,}".format(detail.registration_count) }}</div>
+    <div class="kpi-meta">覆蓋充裕度 {{ detail.coverage_level }}</div>
+  </article>
+  <article class="kpi-card">
+    <div class="kpi-label">IRAC 種數</div>
+    <div class="kpi-value">{{ detail.coverage_irac_code_count }}</div>
+    <div class="kpi-meta">IRAC 多樣性 {{ detail.irac_diversity }}</div>
+  </article>
+</section>
+
+<section class="grid-main">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">IRAC 組成</div>
+        <div class="panel-meta">主題三 / 農藥情報映射到單一作物層級</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="detail-irac-chart" class="chart chart-medium"></div>
+      <table class="data-table compact">
+        <thead>
+          <tr>
+            <th>IRAC</th>
+            <th class="num">筆數</th>
+            <th class="num">占比</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.irac_profile %}
+            <tr>
+              <td class="mono">{{ row.code }}</td>
+              <td class="num mono">{{ "{:,}".format(row.count) }}</td>
+              <td class="num mono">{{ "{:.1%}".format(row.share) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <div class="stack">
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">判讀重點</div>
+          <div class="panel-meta">將數據轉成標案與 demo 場景可直接口述的摘要</div>
+        </div>
+      </div>
+      <div class="panel-body findings-list">
+        {% for point in detail.advisory_points %}
+          <div class="finding finding-mid">
+            <div class="finding-body">{{ point }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </article>
+
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">覆蓋結構</div>
+          <div class="panel-meta">全量、農藥製、農藥進的真資料摘要</div>
+        </div>
+      </div>
+      <div class="panel-body detail-stack">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">全量筆數</div>
+            <div class="stat-value">{{ "{:,}".format(detail.total_count) }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">農藥製</div>
+            <div class="stat-value">{{ "{:,}".format(detail.domestic_count) }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">農藥進</div>
+            <div class="stat-value">{{ "{:,}".format(detail.import_count) }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">IRAC 代碼清單</div>
+            <div class="stat-value stat-value-small">{{ detail.irac_codes or "-" }}</div>
+          </div>
+        </div>
+        <div class="inline-meta">{{ detail.risk_note }}</div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">縣市分布</div>
+      <div class="panel-meta">主題一 / 由作物回看高暴露縣市與面積分布</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="detail-county-chart" class="chart chart-medium"></div>
+    <table class="data-table compact">
+      <thead>
+        <tr>
+          <th>縣市</th>
+          <th class="num">作物面積</th>
+          <th class="num">估計暴露</th>
+          <th class="num">鄉鎮數</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail.county_distribution %}
+          <tr>
+            <td><a href="/theme1/map?county={{ row.county | urlencode }}">{{ row.county }}</a></td>
+            <td class="num mono">{{ "{:,.1f}".format(row.area_ha) }}</td>
+            <td class="num mono">{{ "{:,.1f}".format(row.exposure_estimate) }}</td>
+            <td class="num mono">{{ row.town_count }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const iracProfile = {{ detail.irac_profile | tojson }};
+  const countyDistribution = {{ detail.county_distribution | tojson }};
+
+  const iracChart = echarts.init(document.getElementById("detail-irac-chart"));
+  iracChart.setOption({
+    grid: { left: 70, right: 18, top: 10, bottom: 24 },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+    yAxis: { type: "category", data: iracProfile.map((row) => row.code).reverse(), axisTick: { show: false } },
+    series: [{
+      type: "bar",
+      data: iracProfile.map((row) => row.count).reverse(),
+      itemStyle: { color: "#2d5a3d", borderRadius: [0, 3, 3, 0] },
+      barMaxWidth: 16,
+    }],
+  });
+
+  const countyChart = echarts.init(document.getElementById("detail-county-chart"));
+  countyChart.setOption({
+    grid: { left: 90, right: 18, top: 10, bottom: 24 },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+    yAxis: {
+      type: "category",
+      data: countyDistribution.map((row) => row.county).reverse(),
+      axisTick: { show: false },
+    },
+    series: [{
+      type: "bar",
+      data: countyDistribution.map((row) => row.exposure_estimate).reverse(),
+      itemStyle: { color: "#b74e3a", borderRadius: [0, 3, 3, 0] },
+      barMaxWidth: 16,
+    }],
+  });
+
+  window.addEventListener("resize", () => {
+    iracChart.resize();
+    countyChart.resize();
+  });
+</script>
+{% endblock %}

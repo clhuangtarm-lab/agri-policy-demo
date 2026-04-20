@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="light" data-palette="earth" data-density="comfy" data-font="sans" data-layout="default">
+<head>
+<meta charset="UTF-8">
+<title>農業資料視覺化儀表板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&family=Noto+Serif+TC:wght@400;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "palette": "indigo",
+  "density": "comfy",
+  "font": "sans",
+  "layout": "command",
+  "showKPIs": true
+}/*EDITMODE-END*/;
+</script>
+<script src="data.js"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="pages.jsx"></script>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+function App() {
+  // Load saved settings from localStorage
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("agri-tweaks") || "{}");
+      return { ...TWEAK_DEFAULTS, ...saved };
+    } catch { return TWEAK_DEFAULTS; }
+  });
+  const [page, setPage] = useState(() => localStorage.getItem("agri-page") || "overview");
+  const [selectedCounty, setSelectedCounty] = useState("雲林縣");
+  const [selectedCrop, setSelectedCrop] = useState("稉稻");
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+
+  // Apply attrs to root
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-theme", settings.theme);
+    root.setAttribute("data-palette", settings.palette);
+    root.setAttribute("data-density", settings.density);
+    root.setAttribute("data-font", settings.font);
+    root.setAttribute("data-layout", settings.layout);
+    localStorage.setItem("agri-tweaks", JSON.stringify(settings));
+  }, [settings]);
+
+  useEffect(() => { localStorage.setItem("agri-page", page); }, [page]);
+
+  // Edit mode protocol
+  useEffect(() => {
+    function onMsg(e) {
+      const d = e.data;
+      if (!d || typeof d !== "object") return;
+      if (d.type === "__activate_edit_mode") setTweaksOpen(true);
+      if (d.type === "__deactivate_edit_mode") setTweaksOpen(false);
+    }
+    window.addEventListener("message", onMsg);
+    window.parent.postMessage({ type: "__edit_mode_available" }, "*");
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  const update = useCallback((k, v) => {
+    setSettings(s => {
+      const next = { ...s, [k]: v };
+      window.parent.postMessage({ type: "__edit_mode_set_keys", edits: { [k]: v } }, "*");
+      return next;
+    });
+  }, []);
+
+  const pickCrop = (crop) => { setSelectedCrop(crop); setPage("detail"); };
+  const pickCounty = (c) => { setSelectedCounty(c); setPage("map"); };
+
+  function renderPage() {
+    switch(page) {
+      case "overview": return <OverviewPage showKPIs={settings.showKPIs} onPickCrop={pickCrop} onPickCounty={pickCounty}/>;
+      case "map": return <MapPage selected={selectedCounty} setSelected={setSelectedCounty}/>;
+      case "crop": return <CropPage onPickCrop={pickCrop}/>;
+      case "pesticide": return <PesticidePage/>;
+      case "detail": return <DetailPage crop={selectedCrop}/>;
+      default: return <OverviewPage showKPIs={settings.showKPIs} onPickCrop={pickCrop} onPickCounty={pickCounty}/>;
+    }
+  }
+
+  return (
+    <div className="app" data-screen-label={"page:" + page}>
+      <Brand/>
+      <Topbar page={page}/>
+      <Nav page={page} setPage={setPage}/>
+      <div className="content">{renderPage()}</div>
+      <TweaksPanel open={tweaksOpen} settings={settings} update={update} onClose={()=>setTweaksOpen(false)}/>
+    </div>
+  );
+}
+
+function TweaksPanel({ open, settings, update, onClose }) {
+  if (!open) return null;
+  const opt = (key, options) => (
+    <div className="tweak-opts">
+      {options.map(([v, label]) => (
+        <button key={v} className={settings[key] === v ? "on" : ""} onClick={() => update(key, v)}>{label}</button>
+      ))}
+    </div>
+  );
+  return (
+    <div className="tweaks open">
+      <div className="tweaks-head">
+        <div className="tweaks-title">Tweaks 面板</div>
+        <button className="icon-btn" style={{width:22, height:22}} onClick={onClose}>×</button>
+      </div>
+      <div className="tweaks-body">
+        <div className="tweak-row">
+          <div className="tweak-label">版面配置 · LAYOUT</div>
+          {opt("layout", [["default","分頁式"],["command","Command"],["story","Story"]])}
+        </div>
+        <div className="tweak-row">
+          <div className="tweak-label">深／淺色 · THEME</div>
+          {opt("theme", [["light","淺色"],["dark","深色"]])}
+        </div>
+        <div className="tweak-row">
+          <div className="tweak-label">配色主題 · PALETTE</div>
+          {opt("palette", [["earth","土地"],["indigo","靛藍"],["mono","單色"]])}
+        </div>
+        <div className="tweak-row">
+          <div className="tweak-label">資料密度 · DENSITY</div>
+          {opt("density", [["comfy","舒適"],["compact","緊湊"]])}
+        </div>
+        <div className="tweak-row">
+          <div className="tweak-label">字型 · TYPE</div>
+          {opt("font", [["sans","黑體"],["serif","宋體"],["mono","等寬"]])}
+        </div>
+        <div className="tweak-row">
+          <div className="tweak-label">KPI 顯示</div>
+          <label className="tweak-check">
+            <input type="checkbox" checked={settings.showKPIs} onChange={e=>update("showKPIs", e.target.checked)}/>
+            <span>顯示 KPI 列</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

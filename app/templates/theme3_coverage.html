@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}作物風險矩陣{% endblock %}
+{% block content %}
+<form class="filter-bar" method="get" action="/theme3/coverage">
+  <label class="filter-label" for="q">作物查詢</label>
+  <input class="filter-input" id="q" type="text" name="q" value="{{ crop_matrix.query }}" placeholder="輸入作物名稱" />
+  <button class="icon-btn" type="submit">套用</button>
+  {% if crop_matrix.query %}
+    <a class="text-link" href="/theme3/coverage">清除</a>
+  {% endif %}
+</form>
+
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">高風險暴露前十作物</div>
+        <div class="panel-meta">主題二 / 用真資料呈現高風險占比與加權暴露</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="coverage-risk-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">覆蓋充裕度分布</div>
+        <div class="panel-meta">以 coverage_risk 彙整支撐標案中的缺口辨識</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="coverage-level-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+</section>
+
+<section class="grid-main">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">作物風險矩陣</div>
+        <div class="panel-meta">整合作物面積、暴露、登記、覆蓋與 IRAC 多樣性</div>
+      </div>
+    </div>
+    <div class="panel-body panel-body-tight">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>作物</th>
+            <th class="num">面積</th>
+            <th class="num">高風險占比</th>
+            <th class="num">暴露</th>
+            <th class="num">有效登記</th>
+            <th>覆蓋充裕度</th>
+            <th class="num">IRAC 種數</th>
+            <th>IRAC 代碼</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in crop_matrix.rows %}
+            <tr>
+              <td><a href="/detail?crop={{ row.crop | urlencode }}">{{ row.crop }}</a></td>
+              <td class="num mono">{{ "{:,.1f}".format(row.area_ha) }}</td>
+              <td class="num mono">{{ "{:.1%}".format(row.high_risk_ratio) }}</td>
+              <td class="num mono">{{ "{:,.1f}".format(row.exposure) }}</td>
+              <td class="num mono">{{ "{:,}".format(row.registration_count) }}</td>
+              <td><span class="level-pill">{{ row.coverage_level }}</span></td>
+              <td class="num mono">{{ row.coverage_irac_code_count }}</td>
+              <td class="codes-cell">{{ row.irac_codes or "-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <div class="stack">
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">低覆蓋優先名單</div>
+          <div class="panel-meta">從 coverage_risk 找出登記數偏低作物</div>
+        </div>
+      </div>
+      <div class="panel-body panel-body-tight">
+        <table class="data-table compact">
+          <thead>
+            <tr>
+              <th>作物</th>
+              <th class="num">登記數</th>
+              <th class="num">IRAC</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in crop_matrix.low_coverage %}
+              <tr>
+                <td><a href="/detail?crop={{ row.crop | urlencode }}">{{ row.crop }}</a></td>
+                <td class="num mono">{{ row.registration_count }}</td>
+                <td class="num mono">{{ row.irac_code_count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">脆弱作物提示</div>
+          <div class="panel-meta">主題二 / 以低登記與低多樣性作為缺口示範</div>
+        </div>
+      </div>
+      <div class="panel-body findings-list">
+        {% for row in crop_matrix.vulnerable %}
+          <div class="finding finding-mid">
+            <div class="finding-title">{{ row.crop }}</div>
+            <div class="finding-body">{{ row.risk_note }}</div>
+            <div class="inline-meta">有效登記 {{ row.registration_count }} / IRAC 多樣性 {{ row.irac_diversity }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </article>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const highRisk = {{ crop_matrix.high_risk | tojson }};
+  const lowCoverage = {{ crop_matrix.low_coverage | tojson }};
+  const coverageLevels = {{ crop_matrix.coverage_levels | tojson }};
+
+  const riskChart = echarts.init(document.getElementById("coverage-risk-chart"));
+  riskChart.setOption({
+    grid: { left: 90, right: 18, top: 10, bottom: 24 },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+    yAxis: { type: "category", data: highRisk.map((row) => row.crop).reverse(), axisTick: { show: false } },
+    series: [{
+      type: "bar",
+      data: highRisk.map((row) => row.exposure).reverse(),
+      itemStyle: { color: "#b74e3a", borderRadius: [0, 3, 3, 0] },
+      barMaxWidth: 16,
+    }],
+  });
+
+  const levelChart = echarts.init(document.getElementById("coverage-level-chart"));
+  levelChart.setOption({
+    tooltip: { trigger: "item" },
+    legend: { bottom: 0 },
+    series: [{
+      type: "pie",
+      radius: ["38%", "68%"],
+      center: ["50%", "42%"],
+      data: coverageLevels.map((row) => ({ name: row.label, value: row.count })),
+      label: { formatter: "{b}\n{c}" },
+      color: ["#2d5a3d", "#8ca84f", "#d9bc5a", "#c88544", "#b74e3a"],
+    }],
+  });
+
+  window.addEventListener("resize", () => {
+    riskChart.resize();
+    levelChart.resize();
+  });
+</script>
+{% endblock %}

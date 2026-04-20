@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.zeabur.app/template.json",
+  "name": "agri-policy-demo",
+  "description": "農業資料整合分析平臺 DEMO (115 年度)",
+  "services": [
+    {
+      "name": "web",
+      "icon": "https://cdn.jsdelivr.net/gh/zeabur/zeabur-cli/public/fastapi.svg",
+      "template": "GIT",
+      "spec": {
+        "source": {
+          "type": "GIT"
+        },
+        "ports": [
+          {
+            "id": "http",
+            "port": 8080,
+            "type": "HTTP"
+          }
+        ],
+        "env": {
+          "DATABASE_PATH": {
+            "default": "/app/data/demo.db"
+          }
+        }
+      }
+    }
+  ]
+}

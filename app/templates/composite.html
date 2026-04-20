@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}農藥情報面板{% endblock %}
+{% block content %}
+<section class="kpi-row kpi-row-4">
+  {% for card in pesticide_summary.kpis %}
+    <article class="kpi-card {% if card.tone %}tone-{{ card.tone }}{% endif %}">
+      <div class="kpi-label">{{ card.label }}</div>
+      <div class="kpi-value">{{ card.value }} <span>{{ card.unit }}</span></div>
+      <div class="kpi-meta">{{ card.meta }}</div>
+    </article>
+  {% endfor %}
+</section>
+
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">IRAC 代碼分布</div>
+        <div class="panel-meta">主題三 / 依實際標註資料統計抗性機制分布</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="irac-distribution-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">劑型分布</div>
+        <div class="panel-meta">以 formCode 盤點主要劑型，支援政策監測與說明</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="form-distribution-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+</section>
+
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">製造商來源前十名</div>
+        <div class="panel-meta">可作為供應來源與進口依賴的輔助資訊</div>
+      </div>
+    </div>
+    <div class="panel-body panel-body-tight">
+      <table class="data-table compact">
+        <thead>
+          <tr>
+            <th>製造商 / 國別</th>
+            <th class="num">筆數</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in pesticide_summary.origin_distribution %}
+            <tr>
+              <td>{{ row.label }}</td>
+              <td class="num mono">{{ "{:,}".format(row.count) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">撤銷與類別摘要</div>
+        <div class="panel-meta">支援風險監測與管理說明</div>
+      </div>
+    </div>
+    <div class="panel-body split-summary">
+      <div>
+        <div class="section-label">撤銷 / 廢止</div>
+        <table class="data-table compact">
+          <thead>
+            <tr>
+              <th>狀態</th>
+              <th class="num">筆數</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in pesticide_summary.revocation_distribution %}
+              <tr>
+                <td>{{ row.label }}</td>
+                <td class="num mono">{{ "{:,}".format(row.count) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="section-label">農藥類別</div>
+        <table class="data-table compact">
+          <thead>
+            <tr>
+              <th>類別</th>
+              <th class="num">筆數</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in pesticide_summary.category_distribution %}
+              <tr>
+                <td>{{ row.label }}</td>
+                <td class="num mono">{{ "{:,}".format(row.count) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </article>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const iracDistribution = {{ pesticide_summary.irac_distribution | tojson }};
+  const formDistribution = {{ pesticide_summary.form_distribution | tojson }};
+
+  const iracChart = echarts.init(document.getElementById("irac-distribution-chart"));
+  iracChart.setOption({
+    grid: { left: 70, right: 18, top: 10, bottom: 24 },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+    yAxis: { type: "category", data: iracDistribution.map((row) => row.label).reverse(), axisTick: { show: false } },
+    series: [{
+      type: "bar",
+      data: iracDistribution.map((row) => row.count).reverse(),
+      itemStyle: { color: "#2d5a3d", borderRadius: [0, 3, 3, 0] },
+      barMaxWidth: 16,
+    }],
+  });
+
+  const formChart = echarts.init(document.getElementById("form-distribution-chart"));
+  formChart.setOption({
+    tooltip: { trigger: "item" },
+    legend: { bottom: 0 },
+    series: [{
+      type: "pie",
+      radius: ["38%", "68%"],
+      center: ["50%", "42%"],
+      data: formDistribution.map((row) => ({ name: row.label, value: row.count })),
+      label: { formatter: "{b}\n{c}" },
+      color: ["#2d5a3d", "#8ca84f", "#d9bc5a", "#c88544", "#b74e3a", "#4a7a8c", "#6a6f5f"],
+    }],
+  });
+
+  window.addEventListener("resize", () => {
+    iracChart.resize();
+    formChart.resize();
+  });
+</script>
+{% endblock %}

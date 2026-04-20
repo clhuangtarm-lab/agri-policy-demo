@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}縣市風險地圖{% endblock %}
+{% block content %}
+<section class="grid-main">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">縣市暴露地圖</div>
+        <div class="panel-meta">主題一 / 點擊縣市即可切換右側 drill-down 區塊</div>
+      </div>
+      <div class="panel-meta">目前：{{ map_data.selected_county }}</div>
+    </div>
+    <div class="panel-body">
+      <div class="map-wrap">
+        <svg class="map-svg" viewBox="0 0 400 560" preserveAspectRatio="xMidYMid meet">
+          <path
+            d="M 200 20 Q 290 40 300 140 Q 310 260 280 360 Q 250 460 180 500 Q 140 470 130 400 Q 100 300 120 200 Q 140 60 200 20 Z"
+            fill="rgba(45,90,61,0.05)"
+            stroke="#b8b69e"
+            stroke-width="0.8"
+            stroke-dasharray="2,3"
+          />
+          {% for row in map_data.counties %}
+            {% set geo = map_data.county_geo.get(row.county_key) %}
+            {% if geo %}
+              <g class="county-node" data-county-key="{{ row.county_key }}" data-exposure="{{ row.exposure }}">
+                <rect
+                  class="county-fill"
+                  x="{{ geo.cx - geo.size / 2 }}"
+                  y="{{ geo.cy - geo.size / 2 }}"
+                  width="{{ geo.size }}"
+                  height="{{ geo.size }}"
+                  rx="3"
+                  ry="3"
+                />
+                <text class="county-label" x="{{ geo.cx }}" y="{{ geo.cy + geo.size / 2 + 12 }}">{{ row.county }}</text>
+              </g>
+            {% endif %}
+          {% endfor %}
+        </svg>
+      </div>
+      <div class="legend-row">
+        <span>低暴露</span>
+        <span class="legend-swatch swatch-1"></span>
+        <span class="legend-swatch swatch-2"></span>
+        <span class="legend-swatch swatch-3"></span>
+        <span class="legend-swatch swatch-4"></span>
+        <span>高暴露</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title" id="selected-county-name">{{ map_data.selected_county }}</div>
+        <div class="panel-meta">縣市摘要與鄉鎮暴露列表</div>
+      </div>
+      <a class="text-link" id="selected-county-link" href="/theme1/map?county={{ map_data.selected_county | urlencode }}">固定連結</a>
+    </div>
+    <div class="panel-body detail-stack">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">總種植面積</div>
+          <div class="stat-value" id="selected-county-area">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">加權暴露</div>
+          <div class="stat-value" id="selected-county-exposure">-</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">前三高風險作物</div>
+        <div class="chip-row" id="selected-county-top-crops"></div>
+      </div>
+
+      <div>
+        <div class="section-label">縣市主要作物結構</div>
+        <table class="data-table compact">
+          <thead>
+            <tr>
+              <th>作物</th>
+              <th class="num">面積</th>
+              <th class="num">鄉鎮數</th>
+            </tr>
+          </thead>
+          <tbody id="county-crop-mix-body"></tbody>
+        </table>
+      </div>
+
+      <div>
+        <div class="section-label">高暴露鄉鎮</div>
+        <table class="data-table compact">
+          <thead>
+            <tr>
+              <th>鄉鎮</th>
+              <th>主作物</th>
+              <th class="num">暴露</th>
+            </tr>
+          </thead>
+          <tbody id="county-township-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </article>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">全縣市暴露排序</div>
+      <div class="panel-meta">主題一對應的治理優先順序，可銜接標案中的示範場域挑選</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="county-risk-chart" class="chart chart-large"></div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const counties = {{ map_data.counties | tojson }};
+  const topTownships = {{ map_data.top_townships | tojson }};
+  const countyCropMix = {{ map_data.county_crop_mix | tojson }};
+  const countyLookup = Object.fromEntries(counties.map((row) => [row.county_key, row]));
+  const selectedCountyKey = {{ map_data.selected_county_key | tojson }};
+  const maxExposure = Math.max(...counties.map((row) => row.exposure), 1);
+
+  function formatNumber(value, digits = 1) {
+    return Number(value || 0).toLocaleString("zh-TW", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+  }
+
+  function riskColor(value) {
+    const ratio = value / maxExposure;
+    if (ratio > 0.75) return "#b74e3a";
+    if (ratio > 0.5) return "#c88544";
+    if (ratio > 0.25) return "#d9bc5a";
+    return "#8ca84f";
+  }
+
+  document.querySelectorAll(".county-node").forEach((node) => {
+    const exposure = Number(node.dataset.exposure || 0);
+    node.querySelector(".county-fill").setAttribute("fill", riskColor(exposure));
+    node.addEventListener("click", () => renderCounty(node.dataset.countyKey));
+  });
+
+  function renderCounty(key) {
+    const county = countyLookup[key] || counties[0];
+    if (!county) return;
+
+    document.querySelectorAll(".county-node").forEach((node) => {
+      node.classList.toggle("selected", node.dataset.countyKey === county.county_key);
+    });
+
+    document.getElementById("selected-county-name").textContent = county.county;
+    document.getElementById("selected-county-area").textContent = `${formatNumber(county.area_ha)} 公頃`;
+    document.getElementById("selected-county-exposure").textContent = formatNumber(county.exposure);
+    document.getElementById("selected-county-link").href = `/theme1/map?county=${encodeURIComponent(county.county)}`;
+
+    const cropContainer = document.getElementById("selected-county-top-crops");
+    cropContainer.innerHTML = "";
+    county.top_crops.forEach((crop) => {
+      const el = document.createElement("a");
+      el.className = "theme-chip";
+      el.href = `/detail?crop=${encodeURIComponent(crop)}`;
+      el.textContent = crop;
+      cropContainer.appendChild(el);
+    });
+
+    const mixBody = document.getElementById("county-crop-mix-body");
+    mixBody.innerHTML = "";
+    (countyCropMix[county.county_key] || []).forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><a href="/detail?crop=${encodeURIComponent(row.crop)}">${row.crop}</a></td>
+        <td class="num mono">${formatNumber(row.area_ha)}</td>
+        <td class="num mono">${row.town_count}</td>
+      `;
+      mixBody.appendChild(tr);
+    });
+
+    const townshipBody = document.getElementById("county-township-body");
+    townshipBody.innerHTML = "";
+    topTownships
+      .filter((row) => row.county === county.county)
+      .slice(0, 10)
+      .forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.town}</td>
+          <td><a href="/detail?crop=${encodeURIComponent(row.top_crop)}">${row.top_crop}</a></td>
+          <td class="num mono">${formatNumber(row.exposure)}</td>
+        `;
+        townshipBody.appendChild(tr);
+      });
+
+    if (history.replaceState) {
+      history.replaceState({}, "", `/theme1/map?county=${encodeURIComponent(county.county)}`);
+    }
+  }
+
+  const chart = echarts.init(document.getElementById("county-risk-chart"));
+  chart.setOption({
+    grid: { left: 90, right: 18, top: 10, bottom: 24 },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    xAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: "#d9d7c5" } },
+    },
+    yAxis: {
+      type: "category",
+      data: counties.map((row) => row.county).reverse(),
+      axisTick: { show: false },
+    },
+    series: [{
+      type: "bar",
+      data: counties.map((row) => row.exposure).reverse(),
+      itemStyle: {
+        color: (params) => riskColor(params.data),
+        borderRadius: [0, 3, 3, 0],
+      },
+      barMaxWidth: 16,
+    }],
+  });
+  window.addEventListener("resize", () => chart.resize());
+
+  renderCounty(selectedCountyKey);
+</script>
+{% endblock %}

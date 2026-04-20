@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}總覽儀表板{% endblock %}
+{% block content %}
+<section class="kpi-row kpi-row-5">
+  {% for card in overview.kpis %}
+    <article class="kpi-card {% if card.tone %}tone-{{ card.tone }}{% endif %}">
+      <div class="kpi-label">{{ card.label }}</div>
+      <div class="kpi-value">{{ card.value }} <span>{{ card.unit }}</span></div>
+      <div class="kpi-meta">{{ card.meta }}</div>
+    </article>
+  {% endfor %}
+</section>
+
+<section class="grid-main">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">高風險作物排序</div>
+        <div class="panel-meta">主題二 / 以加權暴露排序的優先處理名單</div>
+      </div>
+    </div>
+    <div class="panel-body panel-body-tight">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>作物</th>
+            <th class="num">面積</th>
+            <th class="num">高風險占比</th>
+            <th class="num">暴露</th>
+            <th class="num">登記數</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in overview.risk_crops %}
+            <tr>
+              <td class="mono">{{ loop.index }}</td>
+              <td><a href="/detail?crop={{ row.crop | urlencode }}">{{ row.crop }}</a></td>
+              <td class="num mono">{{ "{:,.1f}".format(row.area_ha) }}</td>
+              <td class="num mono">{{ "{:.1%}".format(row.high_risk_ratio) }}</td>
+              <td class="num mono">{{ "{:,.1f}".format(row.exposure) }}</td>
+              <td class="num mono">{{ "{:,}".format(row.registration_count) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">關鍵觀察</div>
+        <div class="panel-meta">將三大主題邏輯收束成標案簡報可直接使用的重點句</div>
+      </div>
+    </div>
+    <div class="panel-body findings-list">
+      {% for finding in overview.findings %}
+        <div class="finding finding-{{ finding.tone }}">
+          <div class="finding-title">{{ finding.title }}</div>
+          <div class="finding-body">{{ finding.body }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">縣市暴露排名</div>
+        <div class="panel-meta">主題一 / 聚焦場域與縣市治理優先順序</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="county-exposure-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">作物暴露前十名</div>
+        <div class="panel-meta">主題二 / Drill-down 至作物深度頁</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="crop-exposure-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">縣市摘要</div>
+      <div class="panel-meta">點擊縣市可進入地圖頁並延續 drill-down</div>
+    </div>
+  </div>
+  <div class="panel-body panel-body-tight">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>縣市</th>
+          <th class="num">總面積</th>
+          <th class="num">暴露</th>
+          <th>前三高風險作物</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in overview.county_risk %}
+          <tr>
+            <td class="mono">{{ loop.index }}</td>
+            <td><a href="/theme1/map?county={{ row.county | urlencode }}">{{ row.county }}</a></td>
+            <td class="num mono">{{ "{:,.1f}".format(row.area_ha) }}</td>
+            <td class="num mono">{{ "{:,.1f}".format(row.exposure) }}</td>
+            <td>{{ "、".join(row.top_crops) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const countyRisk = {{ overview.county_risk | tojson }};
+  const cropRisk = {{ overview.risk_crops | tojson }};
+
+  function makeBarChart(el, data, nameKey, valueKey, color) {
+    const chart = echarts.init(document.getElementById(el));
+    chart.setOption({
+      animationDuration: 400,
+      grid: { left: 90, right: 18, top: 10, bottom: 24 },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: {
+        type: "value",
+        splitLine: { lineStyle: { color: "#d9d7c5" } },
+      },
+      yAxis: {
+        type: "category",
+        data: data.map((row) => row[nameKey]).reverse(),
+        axisTick: { show: false },
+      },
+      series: [{
+        type: "bar",
+        data: data.map((row) => row[valueKey]).reverse(),
+        itemStyle: { color, borderRadius: [0, 3, 3, 0] },
+        barMaxWidth: 16,
+      }],
+    });
+    window.addEventListener("resize", () => chart.resize());
+  }
+
+  makeBarChart("county-exposure-chart", countyRisk.slice(0, 8), "county", "exposure", "#2d5a3d");
+  makeBarChart("crop-exposure-chart", cropRisk.slice(0, 8), "crop", "exposure", "#b74e3a");
+</script>
+{% endblock %}
