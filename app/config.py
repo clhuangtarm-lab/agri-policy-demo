@@ -19,9 +19,9 @@ DATA_ROOT = Path(os.getenv("DATA_ROOT", BASE_DIR.parent.parent)).resolve()
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 PROJECT_META = {
-    "title": "農業政策風險資訊 Demo 平台",
-    "subtitle": "以作物面積、農藥覆蓋與縣市暴露整合呈現政策監測樣貌",
-    "version": "DEMO v0.2",
+    "title": "農業政策互動決策 Demo 平台",
+    "subtitle": "整合作物風險、產銷履歷、農藥覆蓋與政策情境的互動展示版本",
+    "version": "DEMO v0.3 Interactive",
     "build_date": "2026-04-20",
 }
 
@@ -31,6 +31,8 @@ NAV_ITEMS = [
     {"id": "coverage", "code": "03", "label": "作物風險矩陣", "path": "/theme3/coverage"},
     {"id": "pesticide", "code": "04", "label": "農藥情報面板", "path": "/composite"},
     {"id": "detail", "code": "05", "label": "作物深度頁", "path": "/detail"},
+    {"id": "scenario", "code": "06", "label": "情境沙盤模擬", "path": "/scenario"},
+    {"id": "traceability", "code": "07", "label": "產銷履歷互動頁", "path": "/traceability"},
 ]
 
 THEME_LOGIC = [

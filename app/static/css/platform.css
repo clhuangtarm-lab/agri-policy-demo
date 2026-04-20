@@ -593,6 +593,38 @@ a:hover {
   background: var(--bg-sunken);
 }
 
+.scenario-toolbar {
+  align-items: end;
+}
+
+.scenario-select {
+  min-width: 180px;
+}
+
+.range-group {
+  min-width: min(100%, 320px);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.range-group .filter-label {
+  grid-column: 1 / -1;
+}
+
+.scenario-range {
+  width: 100%;
+  accent-color: var(--forest);
+}
+
+.range-readout {
+  min-width: 48px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
 .mobile-only {
   display: none;
 }
@@ -647,6 +679,11 @@ a:hover {
 
   .page-body {
     padding: 14px;
+  }
+
+  .scenario-select,
+  .range-group {
+    min-width: 100%;
   }
 }
 

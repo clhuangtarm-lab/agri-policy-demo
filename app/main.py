@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import config
-from .routers import composite, detail, home, theme1_map, theme3_coverage
+from .routers import composite, detail, home, scenario, theme1_map, theme3_coverage, traceability
 
 BASE = Path(__file__).resolve().parent
 
@@ -26,6 +26,8 @@ app.include_router(theme1_map.router)
 app.include_router(theme3_coverage.router)
 app.include_router(composite.router)
 app.include_router(detail.router)
+app.include_router(scenario.router)
+app.include_router(traceability.router)
 
 
 @app.get("/healthz")

@@ -1,0 +1,496 @@
+{% extends "base.html" %}
+{% block title %}情境沙盤模擬{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">互動條件設定</div>
+      <div class="panel-meta">以現況資料為基線，模擬政策介入後的暴露、覆蓋與 IRAC 韌性變化。</div>
+    </div>
+    <div class="panel-meta">Scenario Sandbox / mixed architecture island</div>
+  </div>
+  <div class="panel-body">
+    <form class="filter-bar scenario-toolbar" onsubmit="return false;">
+      <label class="filter-label" for="scenario-county">縣市</label>
+      <select class="filter-input scenario-select" id="scenario-county">
+        {% for row in scenario.counties %}
+          <option value="{{ row.county }}" {% if row.county == scenario.selected_county %}selected{% endif %}>{{ row.county }}</option>
+        {% endfor %}
+      </select>
+
+      <label class="filter-label" for="scenario-crop">作物</label>
+      <select class="filter-input scenario-select" id="scenario-crop">
+        {% for row in scenario.crops %}
+          <option value="{{ row.crop }}" {% if row.crop == scenario.selected_crop %}selected{% endif %}>{{ row.crop }}</option>
+        {% endfor %}
+      </select>
+
+      <label class="filter-label" for="scenario-strategy">方案</label>
+      <select class="filter-input scenario-select" id="scenario-strategy">
+        {% for row in scenario.strategies %}
+          <option value="{{ row.id }}" {% if row.id == scenario.selected_strategy %}selected{% endif %}>{{ row.label }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="range-group">
+        <label class="filter-label" for="scenario-intensity">介入強度</label>
+        <input class="scenario-range" id="scenario-intensity" type="range" min="0" max="100" step="5" value="{{ scenario.selected_intensity }}" />
+        <div class="range-readout mono" id="scenario-intensity-value">{{ scenario.selected_intensity }}</div>
+      </div>
+    </form>
+
+    <div class="chip-row">
+      <span class="theme-chip">方案僅為情境估計，非真實政策成效</span>
+      <span class="theme-chip" id="scenario-focus-chip"></span>
+      <span class="theme-chip" id="scenario-crop-chip"></span>
+      <span class="theme-chip" id="scenario-county-chip"></span>
+    </div>
+  </div>
+</section>
+
+<section class="kpi-row kpi-row-5">
+  <article class="kpi-card">
+    <div class="kpi-label">Baseline Exposure</div>
+    <div class="kpi-value mono" id="kpi-baseline">0.0</div>
+    <div class="kpi-meta">縣市 x 作物暴露估計</div>
+  </article>
+  <article class="kpi-card tone-info">
+    <div class="kpi-label">Scenario Exposure</div>
+    <div class="kpi-value mono" id="kpi-scenario">0.0</div>
+    <div class="kpi-meta">套用策略後估計值</div>
+  </article>
+  <article class="kpi-card tone-warn">
+    <div class="kpi-label">Risk Reduction</div>
+    <div class="kpi-value mono" id="kpi-delta">0%</div>
+    <div class="kpi-meta">相對於基線的改善幅度</div>
+  </article>
+  <article class="kpi-card">
+    <div class="kpi-label">Coverage Index</div>
+    <div class="kpi-value mono" id="kpi-coverage">0</div>
+    <div class="kpi-meta">依現有登記與方案強度估計</div>
+  </article>
+  <article class="kpi-card tone-info">
+    <div class="kpi-label">Priority Towns</div>
+    <div class="kpi-value mono" id="kpi-towns">0</div>
+    <div class="kpi-meta">建議優先巡查鄉鎮數</div>
+  </article>
+</section>
+
+<section class="grid-main">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">跨縣市暴露對比</div>
+        <div class="panel-meta">以所選作物為主軸，比較各縣市基線與方案後的暴露差異。</div>
+      </div>
+      <a class="text-link" id="scenario-detail-link" href="/detail">查看作物深度頁</a>
+    </div>
+    <div class="panel-body">
+      <div id="scenario-exposure-chart" class="chart chart-large"></div>
+    </div>
+  </article>
+
+  <div class="stack">
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">政策建議摘要</div>
+          <div class="panel-meta">隱性串接三大主題：空間熱點、覆蓋缺口、IRAC 輪替。</div>
+        </div>
+      </div>
+      <div class="panel-body findings-list" id="scenario-recommendations"></div>
+    </article>
+
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">關聯指標</div>
+          <div class="panel-meta">快速說明當前情境的空間、作物與藥劑面向。</div>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">縣市總暴露</div>
+            <div class="stat-value" id="scenario-county-exposure">0.0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">作物總暴露</div>
+            <div class="stat-value" id="scenario-crop-exposure">0.0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">IRAC 韌性估計</div>
+            <div class="stat-value" id="scenario-irac-resilience">0.0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">登記藥劑數</div>
+            <div class="stat-value" id="scenario-registration-count">0</div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">IRAC 結構模擬</div>
+        <div class="panel-meta">基線維持真實結構，情境後分散效果由策略與強度估計。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="scenario-irac-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">優先鄉鎮清單</div>
+        <div class="panel-meta">所選縣市內的巡查排序，會優先凸顯與所選作物相關的熱點。</div>
+      </div>
+    </div>
+    <div class="panel-body panel-body-tight">
+      <table class="data-table compact">
+        <thead>
+          <tr>
+            <th>鄉鎮</th>
+            <th>主作物</th>
+            <th class="num">加權暴露</th>
+            <th>建議</th>
+          </tr>
+        </thead>
+        <tbody id="scenario-township-body"></tbody>
+      </table>
+    </div>
+  </article>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const strategies = {{ scenario.strategies | tojson }};
+  const counties = {{ scenario.counties | tojson }};
+  const crops = {{ scenario.crops | tojson }};
+  const countyCropRows = {{ scenario.county_crop_rows | tojson }};
+  const townshipRows = {{ scenario.townships | tojson }};
+  const iracProfiles = {{ scenario.irac_profiles | tojson }};
+
+  const strategyLookup = Object.fromEntries(strategies.map((row) => [row.id, row]));
+  const countyLookup = Object.fromEntries(counties.map((row) => [row.county, row]));
+  const cropLookup = Object.fromEntries(crops.map((row) => [row.crop, row]));
+
+  const state = {
+    county: {{ scenario.selected_county | tojson }},
+    crop: {{ scenario.selected_crop | tojson }},
+    strategy: {{ scenario.selected_strategy | tojson }},
+    intensity: {{ scenario.selected_intensity | tojson }},
+  };
+
+  const countyInput = document.getElementById("scenario-county");
+  const cropInput = document.getElementById("scenario-crop");
+  const strategyInput = document.getElementById("scenario-strategy");
+  const intensityInput = document.getElementById("scenario-intensity");
+  const intensityValue = document.getElementById("scenario-intensity-value");
+
+  const exposureChart = echarts.init(document.getElementById("scenario-exposure-chart"));
+  const iracChart = echarts.init(document.getElementById("scenario-irac-chart"));
+
+  function formatNumber(value, digits = 1) {
+    return Number(value || 0).toLocaleString("zh-TW", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function getEffectRatio(strategy, intensity) {
+    return (strategy.effect || 0) * (intensity / 100);
+  }
+
+  function getCoverageIndex(crop, strategy, intensity) {
+    const baseline = Math.min(100, (crop.registration_count || 0) * 2.4 + (crop.coverage_irac_code_count || 0) * 7.5);
+    return clamp(baseline + (strategy.coverage_bonus || 0) * intensity, 0, 100);
+  }
+
+  function getIracResilience(crop, strategy, intensity) {
+    return Number((Number(crop.irac_diversity || 0) + (strategy.diversity_bonus || 0) * (intensity / 10)).toFixed(1));
+  }
+
+  function getCountyCropRows(crop) {
+    return countyCropRows
+      .filter((row) => row.crop === crop)
+      .sort((a, b) => (b.exposure || 0) - (a.exposure || 0));
+  }
+
+  function getSelectedCountyCropRow(county, crop) {
+    return countyCropRows.find((row) => row.county === county && row.crop === crop) || {
+      county,
+      crop,
+      area_ha: 0,
+      town_count: 0,
+      exposure: 0,
+    };
+  }
+
+  function buildScenarioProfile(profile, strategy, intensity) {
+    if (!profile.length) return [];
+
+    const weights = profile.map((row) => Number(row.share || 0));
+    const total = weights.reduce((sum, value) => sum + value, 0) || 1;
+    const normalized = weights.map((value) => value / total);
+    const result = normalized.slice();
+    const shiftBase = Math.min(0.22, (strategy.diversity_bonus || 0) * (intensity / 100) * 0.55);
+
+    if (result.length > 0) {
+      const firstShift = Math.min(result[0] * 0.28, shiftBase);
+      result[0] -= firstShift;
+      let pool = firstShift;
+
+      if (result.length > 1) {
+        const secondShift = Math.min(result[1] * 0.18, shiftBase * 0.6);
+        result[1] -= secondShift;
+        pool += secondShift;
+      }
+
+      const receivers = result.length > 2
+        ? Array.from({ length: result.length - 2 }, (_, index) => index + 2)
+        : (result.length > 1 ? [1] : [0]);
+      const addition = pool / receivers.length;
+      receivers.forEach((index) => {
+        result[index] += addition;
+      });
+    }
+
+    return profile.map((row, index) => ({
+      ...row,
+      baseline_share: normalized[index],
+      scenario_share: result[index],
+    }));
+  }
+
+  function getTownshipPriorities(county, crop, strategy, intensity) {
+    const effectRatio = getEffectRatio(strategy, intensity);
+    return townshipRows
+      .filter((row) => row.county === county)
+      .map((row) => {
+        const cropMatch = row.top_crop === crop;
+        const weight = cropMatch ? 1.2 : 0.72;
+        const weightedExposure = Number((row.exposure * weight * (1 - effectRatio * (cropMatch ? 0.9 : 0.45))).toFixed(1));
+        let action = "追蹤";
+        if (weightedExposure >= 120) action = "立即巡查";
+        else if (weightedExposure >= 60) action = "優先輔導";
+        return {
+          ...row,
+          weightedExposure,
+          action,
+        };
+      })
+      .sort((a, b) => b.weightedExposure - a.weightedExposure)
+      .slice(0, 8);
+  }
+
+  function getRecommendations(countyRow, cropRow, selectedCountyCrop, strategy, intensity, priorityRows, coverageIndex, resilience) {
+    const topTowns = priorityRows.slice(0, 3).map((row) => row.town).join("、") || "目前無明顯熱點";
+    const reduction = selectedCountyCrop.exposure > 0
+      ? (selectedCountyCrop.exposure - selectedCountyCrop.exposure * (1 - getEffectRatio(strategy, intensity))) / selectedCountyCrop.exposure
+      : 0;
+
+    return [
+      {
+        tone: "finding-high",
+        title: `${countyRow.county} 空間熱點調度`,
+        body: `建議先從 ${topTowns} 啟動 ${strategy.label}，優先壓低 ${cropRow.crop} 的高暴露區塊。`,
+      },
+      {
+        tone: "finding-mid",
+        title: `${cropRow.crop} 覆蓋缺口補強`,
+        body: `目前登記藥劑 ${cropRow.registration_count} 項，模擬後覆蓋指數約 ${Math.round(coverageIndex)}，可作為補足防治資源的簡報指標。`,
+      },
+      {
+        tone: "finding-mid",
+        title: `IRAC 韌性與溝通`,
+        body: `策略強度 ${intensity} 下，IRAC 韌性估計提升至 ${resilience}，預估暴露改善幅度 ${formatNumber(reduction * 100, 1)}%。`,
+      },
+    ];
+  }
+
+  function syncUrl() {
+    const params = new URLSearchParams({
+      county: state.county,
+      crop: state.crop,
+      strategy: state.strategy,
+      intensity: String(state.intensity),
+    });
+    history.replaceState({}, "", `/scenario?${params.toString()}`);
+  }
+
+  function render() {
+    const strategy = strategyLookup[state.strategy];
+    const countyRow = countyLookup[state.county];
+    const cropRow = cropLookup[state.crop];
+    const selectedCountyCrop = getSelectedCountyCropRow(state.county, state.crop);
+    const effectRatio = getEffectRatio(strategy, state.intensity);
+    const scenarioExposure = selectedCountyCrop.exposure * (1 - effectRatio);
+    const coverageIndex = getCoverageIndex(cropRow, strategy, state.intensity);
+    const resilience = getIracResilience(cropRow, strategy, state.intensity);
+    const priorityRows = getTownshipPriorities(state.county, state.crop, strategy, state.intensity);
+    const exposureRows = getCountyCropRows(state.crop).slice(0, 8);
+    const reductionPercent = selectedCountyCrop.exposure > 0
+      ? (1 - (scenarioExposure / selectedCountyCrop.exposure)) * 100
+      : 0;
+    const recommendations = getRecommendations(
+      countyRow,
+      cropRow,
+      selectedCountyCrop,
+      strategy,
+      state.intensity,
+      priorityRows,
+      coverageIndex,
+      resilience,
+    );
+
+    intensityValue.textContent = state.intensity;
+    document.getElementById("scenario-focus-chip").textContent = strategy.focus;
+    document.getElementById("scenario-crop-chip").textContent = `作物 / ${state.crop}`;
+    document.getElementById("scenario-county-chip").textContent = `縣市 / ${state.county}`;
+    document.getElementById("scenario-detail-link").href = `/detail?crop=${encodeURIComponent(state.crop)}`;
+
+    document.getElementById("kpi-baseline").textContent = formatNumber(selectedCountyCrop.exposure);
+    document.getElementById("kpi-scenario").textContent = formatNumber(scenarioExposure);
+    document.getElementById("kpi-delta").textContent = `${formatNumber(reductionPercent, 1)}%`;
+    document.getElementById("kpi-coverage").textContent = Math.round(coverageIndex);
+    document.getElementById("kpi-towns").textContent = priorityRows.length;
+
+    document.getElementById("scenario-county-exposure").textContent = formatNumber(countyRow.exposure);
+    document.getElementById("scenario-crop-exposure").textContent = formatNumber(cropRow.exposure);
+    document.getElementById("scenario-irac-resilience").textContent = formatNumber(resilience, 1);
+    document.getElementById("scenario-registration-count").textContent = Number(cropRow.registration_count || 0).toLocaleString("zh-TW");
+
+    const recommendationsContainer = document.getElementById("scenario-recommendations");
+    recommendationsContainer.innerHTML = "";
+    recommendations.forEach((item) => {
+      const el = document.createElement("div");
+      el.className = `finding ${item.tone}`;
+      el.innerHTML = `
+        <div class="finding-title">${item.title}</div>
+        <div class="finding-body">${item.body}</div>
+      `;
+      recommendationsContainer.appendChild(el);
+    });
+
+    const townshipBody = document.getElementById("scenario-township-body");
+    townshipBody.innerHTML = "";
+    priorityRows.forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.town}</td>
+        <td><a href="/detail?crop=${encodeURIComponent(row.top_crop)}">${row.top_crop}</a></td>
+        <td class="num mono">${formatNumber(row.weightedExposure)}</td>
+        <td>${row.action}</td>
+      `;
+      townshipBody.appendChild(tr);
+    });
+
+    exposureChart.setOption({
+      grid: { left: 88, right: 18, top: 16, bottom: 24 },
+      legend: { top: 0 },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+      yAxis: {
+        type: "category",
+        data: exposureRows.map((row) => row.county).reverse(),
+        axisTick: { show: false },
+      },
+      series: [
+        {
+          name: "基線",
+          type: "bar",
+          data: exposureRows.map((row) => row.exposure).reverse(),
+          itemStyle: { color: "#b8b69e", borderRadius: [0, 3, 3, 0] },
+          barMaxWidth: 14,
+        },
+        {
+          name: "情境後",
+          type: "bar",
+          data: exposureRows.map((row) => {
+            const ratio = row.county === state.county ? effectRatio : effectRatio * 0.45;
+            return Number((row.exposure * (1 - ratio)).toFixed(1));
+          }).reverse(),
+          itemStyle: {
+            color: (params) => exposureRows[exposureRows.length - 1 - params.dataIndex].county === state.county ? "#2d5a3d" : "#8ca84f",
+            borderRadius: [0, 3, 3, 0],
+          },
+          barMaxWidth: 14,
+        },
+      ],
+    });
+
+    const scenarioProfile = buildScenarioProfile(iracProfiles[state.crop] || [], strategy, state.intensity);
+    iracChart.setOption({
+      grid: { left: 48, right: 18, top: 16, bottom: 36 },
+      legend: { top: 0 },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: {
+        type: "category",
+        data: scenarioProfile.map((row) => row.code),
+        axisLabel: { interval: 0, rotate: scenarioProfile.length > 5 ? 24 : 0 },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: {
+          formatter: (value) => `${Math.round(value * 100)}%`,
+        },
+        splitLine: { lineStyle: { color: "#d9d7c5" } },
+      },
+      series: [
+        {
+          name: "基線",
+          type: "bar",
+          data: scenarioProfile.map((row) => Number(row.baseline_share.toFixed(4))),
+          itemStyle: { color: "#c88544", borderRadius: [3, 3, 0, 0] },
+          barMaxWidth: 22,
+        },
+        {
+          name: "情境後",
+          type: "bar",
+          data: scenarioProfile.map((row) => Number(row.scenario_share.toFixed(4))),
+          itemStyle: { color: "#4a7a8c", borderRadius: [3, 3, 0, 0] },
+          barMaxWidth: 22,
+        },
+      ],
+    });
+
+    syncUrl();
+  }
+
+  countyInput.addEventListener("change", (event) => {
+    state.county = event.target.value;
+    render();
+  });
+  cropInput.addEventListener("change", (event) => {
+    state.crop = event.target.value;
+    render();
+  });
+  strategyInput.addEventListener("change", (event) => {
+    state.strategy = event.target.value;
+    render();
+  });
+  intensityInput.addEventListener("input", (event) => {
+    state.intensity = Number(event.target.value);
+    render();
+  });
+
+  window.addEventListener("resize", () => {
+    exposureChart.resize();
+    iracChart.resize();
+  });
+
+  render();
+</script>
+{% endblock %}

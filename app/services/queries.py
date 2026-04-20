@@ -649,3 +649,119 @@ def get_key_findings() -> list[dict]:
             }
         )
     return findings
+
+
+def get_traceability_summary() -> dict:
+    return fetchone(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM traceability_producer) AS producer_count,
+            (SELECT COUNT(*) FROM traceability_product) AS product_count,
+            (SELECT COUNT(DISTINCT TraceCode) FROM traceability_product) AS trace_code_count,
+            (SELECT COUNT(*) FROM inspection) AS inspection_count,
+            (SELECT ROUND(AVG(CASE WHEN is_pass THEN 1.0 ELSE 0 END) * 100, 1) FROM inspection) AS inspection_pass_rate,
+            (SELECT COUNT(*) FROM traceability_producer WHERE Status = '通過') AS active_producer_count
+        """
+    )
+
+
+def get_traceability_status_distribution() -> list[dict]:
+    return fetchall(
+        """
+        SELECT Status AS label,
+               COUNT(*) AS count
+        FROM traceability_producer
+        WHERE TRIM(COALESCE(Status, '')) <> ''
+        GROUP BY Status
+        ORDER BY count DESC, Status ASC
+        """
+    )
+
+
+def get_traceability_county_distribution(limit: int | None = None) -> list[dict]:
+    sql = """
+        SELECT county_raw AS county,
+               producer_count
+        FROM agg_producer_county
+        WHERE TRIM(COALESCE(county_raw, '')) <> ''
+        ORDER BY producer_count DESC, county_raw ASC
+    """
+    if limit is not None:
+        sql += " LIMIT ?"
+        return fetchall(sql, (limit,))
+    return fetchall(sql)
+
+
+def get_traceability_crop_distribution(limit: int | None = None) -> list[dict]:
+    sql = """
+        SELECT crop_root AS crop,
+               COUNT(*) AS product_count,
+               COUNT(DISTINCT TraceCode) AS trace_count
+        FROM traceability_product
+        WHERE TRIM(COALESCE(crop_root, '')) <> ''
+        GROUP BY crop_root
+        ORDER BY product_count DESC, crop_root ASC
+    """
+    if limit is not None:
+        sql += " LIMIT ?"
+        return fetchall(sql, (limit,))
+    return fetchall(sql)
+
+
+def get_traceability_inspection_distribution(limit: int | None = None) -> list[dict]:
+    sql = """
+        SELECT crop_root AS crop,
+               COUNT(*) AS inspection_count,
+               ROUND(AVG(CASE WHEN is_pass THEN 1.0 ELSE 0 END) * 100, 1) AS pass_rate
+        FROM inspection
+        WHERE TRIM(COALESCE(crop_root, '')) <> ''
+        GROUP BY crop_root
+        ORDER BY inspection_count DESC, crop_root ASC
+    """
+    if limit is not None:
+        sql += " LIMIT ?"
+        return fetchall(sql, (limit,))
+    return fetchall(sql)
+
+
+def get_traceability_county_crop_rows() -> list[dict]:
+    return fetchall(
+        """
+        SELECT SUBSTR(tp.Address, 1, 3) AS county,
+               pr.crop_root AS crop,
+               COUNT(*) AS product_count,
+               COUNT(DISTINCT pr.TraceCode) AS trace_count,
+               COUNT(DISTINCT tp.Producer) AS producer_count
+        FROM traceability_product pr
+        JOIN traceability_producer tp
+          ON tp.TraceCode = pr.TraceCode
+        WHERE TRIM(COALESCE(pr.crop_root, '')) <> ''
+          AND TRIM(COALESCE(tp.Address, '')) <> ''
+        GROUP BY SUBSTR(tp.Address, 1, 3), pr.crop_root
+        ORDER BY product_count DESC, county ASC, crop ASC
+        """
+    )
+
+
+def get_traceability_sample_records(limit: int = 240) -> list[dict]:
+    return fetchall(
+        """
+        SELECT pr.TraceCode AS trace_code,
+               pr.crop_root AS crop,
+               pr.Product AS product,
+               pr.Place AS place,
+               tp.Producer AS producer,
+               SUBSTR(tp.Address, 1, 3) AS county,
+               tp.Address AS address,
+               tp.Status AS status,
+               tp.ModifyDate AS modify_date
+        FROM traceability_product pr
+        JOIN traceability_producer tp
+          ON tp.TraceCode = pr.TraceCode
+        WHERE TRIM(COALESCE(pr.crop_root, '')) <> ''
+          AND TRIM(COALESCE(tp.Address, '')) <> ''
+        ORDER BY tp.ModifyDate DESC, pr.TraceCode ASC
+        LIMIT ?
+        """,
+        (limit,),
+    )

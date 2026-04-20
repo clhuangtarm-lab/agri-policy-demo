@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+{% block title %}產銷履歷互動頁{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">履歷篩選面板</div>
+      <div class="panel-meta">依縣市、作物與履歷狀態切換，觀察履歷覆蓋與檢驗輪廓。</div>
+    </div>
+    <div class="panel-meta">Traceability / producer-product-inspection linkage</div>
+  </div>
+  <div class="panel-body">
+    <form class="filter-bar scenario-toolbar" onsubmit="return false;">
+      <label class="filter-label" for="traceability-county">縣市</label>
+      <select class="filter-input scenario-select" id="traceability-county">
+        {% for row in traceability.counties %}
+          <option value="{{ row.county }}" {% if row.county == traceability.selected_county %}selected{% endif %}>{{ row.county }}</option>
+        {% endfor %}
+      </select>
+
+      <label class="filter-label" for="traceability-crop">作物</label>
+      <select class="filter-input scenario-select" id="traceability-crop">
+        {% for row in traceability.crops %}
+          <option value="{{ row.crop }}" {% if row.crop == traceability.selected_crop %}selected{% endif %}>{{ row.crop }}</option>
+        {% endfor %}
+      </select>
+
+      <label class="filter-label" for="traceability-status">履歷狀態</label>
+      <select class="filter-input scenario-select" id="traceability-status">
+        {% for row in traceability.statuses %}
+          <option value="{{ row.label }}" {% if row.label == traceability.selected_status %}selected{% endif %}>{{ row.label }}</option>
+        {% endfor %}
+      </select>
+    </form>
+
+    <div class="chip-row">
+      <span class="theme-chip" id="traceability-county-chip"></span>
+      <span class="theme-chip" id="traceability-crop-chip"></span>
+      <span class="theme-chip" id="traceability-status-chip"></span>
+      <span class="theme-chip">資料來源：API-19 / API-20 / API-23</span>
+    </div>
+  </div>
+</section>
+
+<section class="kpi-row kpi-row-5">
+  <article class="kpi-card">
+    <div class="kpi-label">Trace Producers</div>
+    <div class="kpi-value mono" id="traceability-producer-count">0</div>
+    <div class="kpi-meta">符合篩選條件的生產者估計數</div>
+  </article>
+  <article class="kpi-card tone-info">
+    <div class="kpi-label">Trace Products</div>
+    <div class="kpi-value mono" id="traceability-product-count">0</div>
+    <div class="kpi-meta">篩選後的履歷產品量</div>
+  </article>
+  <article class="kpi-card">
+    <div class="kpi-label">Trace Codes</div>
+    <div class="kpi-value mono" id="traceability-trace-count">0</div>
+    <div class="kpi-meta">獨立履歷碼數量</div>
+  </article>
+  <article class="kpi-card tone-warn">
+    <div class="kpi-label">Inspection Pass</div>
+    <div class="kpi-value mono" id="traceability-pass-rate">0%</div>
+    <div class="kpi-meta">相同作物的檢驗通過率</div>
+  </article>
+  <article class="kpi-card tone-info">
+    <div class="kpi-label">Active Producers</div>
+    <div class="kpi-value mono" id="traceability-active-count">0</div>
+    <div class="kpi-meta">履歷狀態為通過的估計數</div>
+  </article>
+</section>
+
+<section class="grid-main">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">縣市履歷覆蓋</div>
+        <div class="panel-meta">可快速對照所選作物在各縣市的履歷產品量與履歷碼數。</div>
+      </div>
+      <a class="text-link" id="traceability-detail-link" href="/detail">查看作物深度頁</a>
+    </div>
+    <div class="panel-body">
+      <div id="traceability-county-chart" class="chart chart-large"></div>
+    </div>
+  </article>
+
+  <div class="stack">
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">履歷觀察重點</div>
+          <div class="panel-meta">把履歷狀態、作物檢驗與區域分布串在一起，利於簡報敘事。</div>
+        </div>
+      </div>
+      <div class="panel-body findings-list" id="traceability-findings"></div>
+    </article>
+
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">檢驗作物概況</div>
+          <div class="panel-meta">顯示主要履歷作物的抽驗量與通過率。</div>
+        </div>
+      </div>
+      <div class="panel-body panel-body-tight">
+        <table class="data-table compact">
+          <thead>
+            <tr>
+              <th>作物</th>
+              <th class="num">抽驗筆數</th>
+              <th class="num">通過率</th>
+            </tr>
+          </thead>
+          <tbody id="traceability-inspection-body"></tbody>
+        </table>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">履歷狀態分布</div>
+        <div class="panel-meta">以生產者狀態觀察履歷池的活躍度。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="traceability-status-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">履歷樣本清單</div>
+        <div class="panel-meta">呈現篩選後的履歷樣本，可直接掃描生產者、產品與地點。</div>
+      </div>
+    </div>
+    <div class="panel-body panel-body-tight">
+      <table class="data-table compact">
+        <thead>
+          <tr>
+            <th>履歷碼</th>
+            <th>生產者</th>
+            <th>產品</th>
+            <th>縣市</th>
+            <th>狀態</th>
+          </tr>
+        </thead>
+        <tbody id="traceability-record-body"></tbody>
+      </table>
+    </div>
+  </article>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const summary = {{ traceability.summary | tojson }};
+  const countyRows = {{ traceability.counties | tojson }};
+  const cropRows = {{ traceability.crops | tojson }};
+  const statusRows = {{ traceability.statuses | tojson }};
+  const inspectionRows = {{ traceability.inspections | tojson }};
+  const countyCropRows = {{ traceability.county_crop_rows | tojson }};
+  const sampleRows = {{ traceability.sample_rows | tojson }};
+
+  const state = {
+    county: {{ traceability.selected_county | tojson }},
+    crop: {{ traceability.selected_crop | tojson }},
+    status: {{ traceability.selected_status | tojson }},
+  };
+
+  const countyInput = document.getElementById("traceability-county");
+  const cropInput = document.getElementById("traceability-crop");
+  const statusInput = document.getElementById("traceability-status");
+
+  const countyChart = echarts.init(document.getElementById("traceability-county-chart"));
+  const statusChart = echarts.init(document.getElementById("traceability-status-chart"));
+
+  function formatNumber(value, digits = 1) {
+    return Number(value || 0).toLocaleString("zh-TW", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+  }
+
+  function formatInt(value) {
+    return Number(value || 0).toLocaleString("zh-TW");
+  }
+
+  function resolvePassRate(crop) {
+    const row = inspectionRows.find((item) => item.crop === crop);
+    return row ? Number(row.pass_rate || 0) : 0;
+  }
+
+  function getFilteredMatrix() {
+    const countyFiltered = countyCropRows.filter((row) => row.county === state.county);
+    const cropFiltered = countyCropRows.filter((row) => row.crop === state.crop);
+    const selectedRow = countyCropRows.find((row) => row.county === state.county && row.crop === state.crop) || {
+      county: state.county,
+      crop: state.crop,
+      product_count: 0,
+      trace_count: 0,
+      producer_count: 0,
+    };
+    return { countyFiltered, cropFiltered, selectedRow };
+  }
+
+  function getFilteredRecords() {
+    return sampleRows
+      .filter((row) => row.county === state.county)
+      .filter((row) => row.crop === state.crop)
+      .filter((row) => row.status === state.status)
+      .slice(0, 10);
+  }
+
+  function buildFindings(selectedRow, passRate, activeCount) {
+    return [
+      {
+        tone: "finding-high",
+        title: `${state.county} / ${state.crop} 履歷密度`,
+        body: `目前可觀察到 ${formatInt(selectedRow.product_count)} 筆履歷產品、${formatInt(selectedRow.trace_count)} 組履歷碼，可作為區域履歷供給輪廓。`,
+      },
+      {
+        tone: "finding-mid",
+        title: `履歷狀態 ${state.status}`,
+        body: `符合所選狀態的估計生產者約 ${formatInt(activeCount)} 人，可用於說明履歷池活躍程度與後續盤點優先序。`,
+      },
+      {
+        tone: "finding-mid",
+        title: `${state.crop} 抽驗概況`,
+        body: `履歷檢驗通過率約 ${formatNumber(passRate, 1)}%，可與風險矩陣頁交叉說明監測與品質表現。`,
+      },
+    ];
+  }
+
+  function syncUrl() {
+    const params = new URLSearchParams({
+      county: state.county,
+      crop: state.crop,
+      status: state.status,
+    });
+    history.replaceState({}, "", `/traceability?${params.toString()}`);
+  }
+
+  function render() {
+    const { countyFiltered, cropFiltered, selectedRow } = getFilteredMatrix();
+    const selectedStatus = statusRows.find((row) => row.label === state.status);
+    const statusTotal = Number(selectedStatus ? selectedStatus.count : 0);
+    const passRate = resolvePassRate(state.crop);
+    const records = getFilteredRecords();
+    const activeCount = state.status === "通過"
+      ? selectedRow.producer_count
+      : Math.round(selectedRow.producer_count * (statusTotal / Math.max(summary.producer_count || 1, 1)));
+
+    document.getElementById("traceability-county-chip").textContent = `縣市 / ${state.county}`;
+    document.getElementById("traceability-crop-chip").textContent = `作物 / ${state.crop}`;
+    document.getElementById("traceability-status-chip").textContent = `狀態 / ${state.status}`;
+    document.getElementById("traceability-detail-link").href = `/detail?crop=${encodeURIComponent(state.crop)}`;
+
+    document.getElementById("traceability-producer-count").textContent = formatInt(selectedRow.producer_count);
+    document.getElementById("traceability-product-count").textContent = formatInt(selectedRow.product_count);
+    document.getElementById("traceability-trace-count").textContent = formatInt(selectedRow.trace_count);
+    document.getElementById("traceability-pass-rate").textContent = `${formatNumber(passRate, 1)}%`;
+    document.getElementById("traceability-active-count").textContent = formatInt(activeCount);
+
+    const findingsContainer = document.getElementById("traceability-findings");
+    findingsContainer.innerHTML = "";
+    buildFindings(selectedRow, passRate, activeCount).forEach((item) => {
+      const el = document.createElement("div");
+      el.className = `finding ${item.tone}`;
+      el.innerHTML = `
+        <div class="finding-title">${item.title}</div>
+        <div class="finding-body">${item.body}</div>
+      `;
+      findingsContainer.appendChild(el);
+    });
+
+    const inspectionBody = document.getElementById("traceability-inspection-body");
+    inspectionBody.innerHTML = "";
+    inspectionRows.slice(0, 8).forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.crop}</td>
+        <td class="num mono">${formatInt(row.inspection_count)}</td>
+        <td class="num mono">${formatNumber(row.pass_rate, 1)}%</td>
+      `;
+      inspectionBody.appendChild(tr);
+    });
+
+    const recordBody = document.getElementById("traceability-record-body");
+    recordBody.innerHTML = "";
+    records.forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="mono">${row.trace_code}</td>
+        <td>${row.producer}</td>
+        <td>${row.product}</td>
+        <td>${row.county}</td>
+        <td>${row.status}</td>
+      `;
+      recordBody.appendChild(tr);
+    });
+
+    countyChart.setOption({
+      grid: { left: 88, right: 18, top: 16, bottom: 24 },
+      legend: { top: 0 },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+      yAxis: {
+        type: "category",
+        data: cropFiltered.slice(0, 10).map((row) => row.county).reverse(),
+        axisTick: { show: false },
+      },
+      series: [
+        {
+          name: "產品量",
+          type: "bar",
+          data: cropFiltered.slice(0, 10).map((row) => row.product_count).reverse(),
+          itemStyle: { color: "#2d5a3d", borderRadius: [0, 3, 3, 0] },
+          barMaxWidth: 16,
+        },
+        {
+          name: "履歷碼",
+          type: "bar",
+          data: cropFiltered.slice(0, 10).map((row) => row.trace_count).reverse(),
+          itemStyle: { color: "#8ca84f", borderRadius: [0, 3, 3, 0] },
+          barMaxWidth: 16,
+        },
+      ],
+    });
+
+    statusChart.setOption({
+      tooltip: { trigger: "item" },
+      legend: { bottom: 0 },
+      series: [{
+        type: "pie",
+        radius: ["36%", "68%"],
+        center: ["50%", "42%"],
+        data: statusRows.map((row) => ({ name: row.label, value: row.count })),
+        label: { formatter: "{b}\n{c}" },
+        color: ["#2d5a3d", "#c8a951", "#b74e3a", "#4a7a8c"],
+      }],
+    });
+
+    syncUrl();
+  }
+
+  countyInput.addEventListener("change", (event) => {
+    state.county = event.target.value;
+    render();
+  });
+  cropInput.addEventListener("change", (event) => {
+    state.crop = event.target.value;
+    render();
+  });
+  statusInput.addEventListener("change", (event) => {
+    state.status = event.target.value;
+    render();
+  });
+
+  window.addEventListener("resize", () => {
+    countyChart.resize();
+    statusChart.resize();
+  });
+
+  render();
+</script>
+{% endblock %}
