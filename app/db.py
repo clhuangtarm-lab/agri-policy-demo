@@ -1,11 +1,7 @@
-"""SQLite connection helper.
-
-OneDrive 同步會鎖 SQLite 檔（產生 disk I/O error）。
-為避免讀取衝突，啟動時把 DB 快取到本機 temp，再從該路徑連線。
-若設定了環境變數 DATABASE_PATH，則直接使用該路徑（不做快取）。
-"""
+"""SQLite connection helper with runtime DB validation."""
 from __future__ import annotations
 
+import importlib
 import os
 import shutil
 import sqlite3
@@ -15,44 +11,83 @@ from pathlib import Path
 
 from . import config
 
+REQUIRED_TABLES = (
+    "crop_area",
+    "analysis_a",
+    "analysis_c",
+    "coverage_risk",
+    "irac_diversity",
+    "crop_coverage_full",
+    "pesticide_full",
+)
+
+
+def _is_usable_db(path: Path) -> bool:
+    if not path.exists() or path.stat().st_size <= 1024 * 1024:
+        return False
+    try:
+        conn = sqlite3.connect(path)
+        try:
+            existing = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+    return all(table in existing for table in REQUIRED_TABLES)
+
+
+def _bootstrap_initialized_db() -> None:
+    try:
+        build_module = importlib.import_module("etl.build_db")
+        build_module.build()
+    except Exception as exc:  # pragma: no cover - startup safeguard
+        raise FileNotFoundError(
+            "No usable initialized DB found and ETL bootstrap failed."
+        ) from exc
+
 
 def _resolve_runtime_db() -> Path:
-    """決定執行時要開啟哪個 DB 檔。
-
-    優先順序：
-      1. DATABASE_PATH 環境變數（若有）
-      2. config.DB_PATH 本機直用（>1MB）
-      3. OneDrive/mnt 位置的 DB：複製到 temp 再開啟
-      4. ETL 的 build temp 位置（/tmp/agri_demo_build/demo.db）作為 fallback
-    """
     env_path = os.getenv("DATABASE_PATH")
+    env_db = Path(env_path) if env_path else None
     if env_path:
-        return Path(env_path)
+        if _is_usable_db(env_db):
+            return env_db
 
     src = Path(config.DB_PATH)
     src_str = str(src).lower()
     is_synced = "/mnt/" in src_str or "onedrive" in src_str
 
-    # 若主位置檔案可用且非 OneDrive 路徑，直接用
-    if src.exists() and src.stat().st_size > 1024 * 1024 and not is_synced:
+    if _is_usable_db(src) and not is_synced:
         return src
 
     cache = Path(tempfile.gettempdir()) / "agri_demo_runtime" / "demo.db"
     cache.parent.mkdir(parents=True, exist_ok=True)
 
-    if src.exists() and src.stat().st_size > 1024 * 1024:
+    if _is_usable_db(src):
         if not cache.exists() or cache.stat().st_mtime < src.stat().st_mtime:
             shutil.copy2(src, cache)
         return cache
 
-    # fallback：ETL 的 build temp
     build_temp = Path(tempfile.gettempdir()) / "agri_demo_build" / "demo.db"
-    if build_temp.exists() and build_temp.stat().st_size > 1024 * 1024:
+    if _is_usable_db(build_temp):
         return build_temp
 
+    _bootstrap_initialized_db()
+
+    for candidate in (env_db, src, build_temp):
+        if candidate and _is_usable_db(candidate):
+            return candidate
+
     raise FileNotFoundError(
-        f"No usable DB. tried: {src} ({src.stat().st_size if src.exists() else 'missing'} bytes), "
-        f"{build_temp}"
+        "No usable initialized DB found. "
+        f"Checked DATABASE_PATH={env_path!r}, src={src} "
+        f"({src.stat().st_size if src.exists() else 'missing'} bytes), "
+        f"build_temp={build_temp}"
     )
 
 
