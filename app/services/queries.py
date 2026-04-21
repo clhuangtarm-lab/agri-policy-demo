@@ -765,3 +765,49 @@ def get_traceability_sample_records(limit: int = 240) -> list[dict]:
         """,
         (limit,),
     )
+
+
+def get_traceability_filtered_records(
+    county: str | None = None,
+    crop: str | None = None,
+    status: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    conditions = [
+        "TRIM(COALESCE(pr.crop_root, '')) <> ''",
+        "TRIM(COALESCE(tp.Address, '')) <> ''",
+    ]
+    params: list[object] = []
+
+    if county:
+        conditions.append("SUBSTR(tp.Address, 1, 3) = ?")
+        params.append(county)
+    if crop:
+        conditions.append("pr.crop_root = ?")
+        params.append(crop)
+    if status:
+        conditions.append("tp.Status = ?")
+        params.append(status)
+
+    params.append(limit)
+    where_sql = " AND ".join(conditions)
+    return fetchall(
+        f"""
+        SELECT pr.TraceCode AS trace_code,
+               pr.crop_root AS crop,
+               pr.Product AS product,
+               pr.Place AS place,
+               tp.Producer AS producer,
+               SUBSTR(tp.Address, 1, 3) AS county,
+               tp.Address AS address,
+               tp.Status AS status,
+               tp.ModifyDate AS modify_date
+        FROM traceability_product pr
+        JOIN traceability_producer tp
+          ON tp.TraceCode = pr.TraceCode
+        WHERE {where_sql}
+        ORDER BY tp.ModifyDate DESC, pr.TraceCode ASC
+        LIMIT ?
+        """,
+        tuple(params),
+    )

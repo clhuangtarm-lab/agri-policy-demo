@@ -164,8 +164,6 @@
   const statusRows = {{ traceability.statuses | tojson }};
   const inspectionRows = {{ traceability.inspections | tojson }};
   const countyCropRows = {{ traceability.county_crop_rows | tojson }};
-  const sampleRows = {{ traceability.sample_rows | tojson }};
-
   const state = {
     county: {{ traceability.selected_county | tojson }},
     crop: {{ traceability.selected_crop | tojson }},
@@ -209,11 +207,15 @@
   }
 
   function getFilteredRecords() {
-    return sampleRows
-      .filter((row) => row.county === state.county)
-      .filter((row) => row.crop === state.crop)
-      .filter((row) => row.status === state.status)
-      .slice(0, 10);
+    const params = new URLSearchParams({
+      county: state.county,
+      crop: state.crop,
+      status: state.status,
+      limit: "10",
+    });
+    return fetch(`/traceability/api/records?${params.toString()}`)
+      .then((response) => response.json())
+      .then((payload) => payload.rows || []);
   }
 
   function buildFindings(selectedRow, passRate, activeCount) {
@@ -245,12 +247,12 @@
     history.replaceState({}, "", `/traceability?${params.toString()}`);
   }
 
-  function render() {
+  async function render() {
     const { countyFiltered, cropFiltered, selectedRow } = getFilteredMatrix();
     const selectedStatus = statusRows.find((row) => row.label === state.status);
     const statusTotal = Number(selectedStatus ? selectedStatus.count : 0);
     const passRate = resolvePassRate(state.crop);
-    const records = getFilteredRecords();
+    const records = await getFilteredRecords();
     const activeCount = state.status === "通過"
       ? selectedRow.producer_count
       : Math.round(selectedRow.producer_count * (statusTotal / Math.max(summary.producer_count || 1, 1)));
@@ -292,17 +294,23 @@
 
     const recordBody = document.getElementById("traceability-record-body");
     recordBody.innerHTML = "";
-    records.forEach((row) => {
+    if (!records.length) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td class="mono">${row.trace_code}</td>
-        <td>${row.producer}</td>
-        <td>${row.product}</td>
-        <td>${row.county}</td>
-        <td>${row.status}</td>
-      `;
+      tr.innerHTML = `<td colspan="5" class="inline-meta">查無符合目前縣市 / 作物 / 狀態的履歷樣本，請改選其他組合。</td>`;
       recordBody.appendChild(tr);
-    });
+    } else {
+      records.forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${row.trace_code}</td>
+          <td>${row.producer}</td>
+          <td>${row.product}</td>
+          <td>${row.county}</td>
+          <td>${row.status}</td>
+        `;
+        recordBody.appendChild(tr);
+      });
+    }
 
     countyChart.setOption({
       grid: { left: 88, right: 18, top: 16, bottom: 24 },

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from fastapi.responses import HTMLResponse
 
 from .. import config
@@ -59,3 +60,19 @@ async def traceability_page(
         "traceability": traceability,
     }
     return templates.TemplateResponse("traceability.html", ctx)
+
+
+@router.get("/traceability/api/records", response_class=JSONResponse)
+async def traceability_records_api(
+    county: str | None = None,
+    crop: str | None = None,
+    status: str | None = None,
+    limit: int = 20,
+):
+    rows = queries.get_traceability_filtered_records(
+        county=county,
+        crop=crop,
+        status=status,
+        limit=max(1, min(limit, 50)),
+    )
+    return {"rows": rows}
