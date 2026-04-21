@@ -178,6 +178,63 @@
 <section class="panel">
   <div class="panel-head">
     <div>
+      <div class="panel-title">政策比較模式</div>
+      <div class="panel-meta">可切換縣市對比或作物對比，協助委員快速比較政策示範優先序。</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <form class="filter-bar scenario-compare-toolbar" onsubmit="return false;">
+      <label class="filter-label" for="scenario-compare-dimension">比較維度</label>
+      <select class="filter-input scenario-select" id="scenario-compare-dimension">
+        <option value="county">縣市對比</option>
+        <option value="crop">作物對比</option>
+      </select>
+
+      <label class="filter-label" for="scenario-compare-target">比較對象</label>
+      <select class="filter-input scenario-select" id="scenario-compare-target"></select>
+    </form>
+
+    <div class="scenario-compare-layout">
+      <div>
+        <div id="scenario-compare-chart" class="chart chart-medium"></div>
+        <div class="figure-caption"><strong>解讀：</strong>以同一套策略與強度比較兩個候選對象的相對表現，適合用於討論示範場域或優先補助順序。</div>
+      </div>
+
+      <div class="scenario-compare-stack">
+        <article class="comparison-card">
+          <div class="comparison-card-title" id="scenario-primary-label">當前情境</div>
+          <div class="comparison-card-metrics" id="scenario-primary-card"></div>
+        </article>
+        <article class="comparison-card">
+          <div class="comparison-card-title" id="scenario-compare-label">比較對象</div>
+          <div class="comparison-card-metrics" id="scenario-compare-card"></div>
+        </article>
+        <article class="comparison-card comparison-card-note">
+          <div class="comparison-card-title">比較摘要</div>
+          <div class="comparison-note-list" id="scenario-compare-note"></div>
+        </article>
+      </div>
+    </div>
+
+    <div class="scenario-compare-table-wrap">
+      <table class="data-table compact">
+        <thead>
+          <tr>
+            <th>指標</th>
+            <th id="scenario-primary-column">當前情境</th>
+            <th id="scenario-compare-column">比較對象</th>
+            <th>判讀</th>
+          </tr>
+        </thead>
+        <tbody id="scenario-compare-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
       <div class="panel-title">優先鄉鎮清單</div>
       <div class="panel-meta">依加權暴露估計排序，協助說明優先巡查或輔導對象。</div>
     </div>
@@ -216,17 +273,30 @@
     crop: {{ scenario.selected_crop | tojson }},
     strategy: {{ scenario.selected_strategy | tojson }},
     intensity: {{ scenario.selected_intensity | tojson }},
+    compareBy: "county",
+    compareTarget: "",
   };
+
+  const initialParams = new URLSearchParams(window.location.search);
+  if (initialParams.get("compare_by") === "crop") {
+    state.compareBy = "crop";
+  }
+  if (initialParams.get("compare_target")) {
+    state.compareTarget = initialParams.get("compare_target");
+  }
 
   const countyInput = document.getElementById("scenario-county");
   const cropInput = document.getElementById("scenario-crop");
   const strategyInput = document.getElementById("scenario-strategy");
   const intensityInput = document.getElementById("scenario-intensity");
   const intensityValue = document.getElementById("scenario-intensity-value");
+  const compareDimensionInput = document.getElementById("scenario-compare-dimension");
+  const compareTargetInput = document.getElementById("scenario-compare-target");
 
   const exposureChart = echarts.init(document.getElementById("scenario-exposure-chart"));
   const iracChart = echarts.init(document.getElementById("scenario-irac-chart"));
   const scorecardChart = echarts.init(document.getElementById("scenario-scorecard-chart"));
+  const compareChart = echarts.init(document.getElementById("scenario-compare-chart"));
 
   function formatNumber(value, digits = 1) {
     return Number(value || 0).toLocaleString("zh-TW", {
@@ -272,6 +342,12 @@
   function getCountyCropRows(crop) {
     return countyCropRows
       .filter((row) => row.crop === crop)
+      .sort((a, b) => (b.exposure || 0) - (a.exposure || 0));
+  }
+
+  function getCropRowsForCounty(county) {
+    return countyCropRows
+      .filter((row) => row.county === county)
       .sort((a, b) => (b.exposure || 0) - (a.exposure || 0));
   }
 
@@ -377,6 +453,57 @@
     };
   }
 
+  function getScenarioMetrics(county, crop, strategy, intensity) {
+    const countyRow = countyLookup[county] || { county, exposure: 0 };
+    const cropRow = cropLookup[crop] || {
+      crop,
+      exposure: 0,
+      registration_count: 0,
+      irac_diversity: 0,
+      coverage_irac_code_count: 0,
+    };
+    const selectedCountyCrop = getSelectedCountyCropRow(county, crop);
+    const effectRatio = getEffectRatio(strategy, intensity);
+    const scenarioExposure = Number((selectedCountyCrop.exposure * (1 - effectRatio)).toFixed(1));
+    const baselineCoverage = getCoverageIndex(cropRow, { coverage_bonus: 0 }, 0);
+    const coverageIndex = getCoverageIndex(cropRow, strategy, intensity);
+    const baselineResilience = Number(cropRow.irac_diversity || 0);
+    const resilience = getIracResilience(cropRow, strategy, intensity);
+    const reductionPercent = selectedCountyCrop.exposure > 0
+      ? (1 - (scenarioExposure / selectedCountyCrop.exposure)) * 100
+      : 0;
+    const scorecard = getScenarioScorecard(
+      cropRow,
+      selectedCountyCrop,
+      scenarioExposure,
+      coverageIndex,
+      baselineCoverage,
+      resilience,
+      baselineResilience,
+    );
+    const areaMax = Math.max(...countyCropRows.map((row) => Number(row.area_ha || 0)), 1);
+    const townMax = Math.max(...countyCropRows.map((row) => Number(row.town_count || 0)), 1);
+
+    return {
+      county,
+      crop,
+      countyRow,
+      cropRow,
+      selectedCountyCrop,
+      scenarioExposure,
+      coverageIndex,
+      resilience,
+      reductionPercent,
+      scores: {
+        riskControl: scorecard.scenario[0],
+        coverage: scorecard.scenario[1],
+        resilience: scorecard.scenario[2],
+        scale: clamp((Number(selectedCountyCrop.area_ha || 0) / areaMax) * 100, 0, 100),
+        spread: clamp((Number(selectedCountyCrop.town_count || 0) / townMax) * 100, 0, 100),
+      },
+    };
+  }
+
   function getRecommendations(countyRow, cropRow, selectedCountyCrop, strategy, intensity, priorityRows, coverageIndex, resilience) {
     const topTowns = priorityRows.slice(0, 3).map((row) => row.town).join("、") || "目前無明顯熱點";
     const reduction = selectedCountyCrop.exposure > 0
@@ -402,13 +529,238 @@
     ];
   }
 
+  function getComparisonOptions() {
+    if (state.compareBy === "crop") {
+      return getCropRowsForCounty(state.county)
+        .filter((row) => row.crop !== state.crop)
+        .slice(0, 12)
+        .map((row) => ({
+          value: row.crop,
+          label: `${row.crop}｜暴露 ${formatNumber(row.exposure)}`,
+        }));
+    }
+
+    return getCountyCropRows(state.crop)
+      .filter((row) => row.county !== state.county)
+      .slice(0, 12)
+      .map((row) => ({
+        value: row.county,
+        label: `${row.county}｜暴露 ${formatNumber(row.exposure)}`,
+      }));
+  }
+
+  function ensureComparisonState() {
+    const options = getComparisonOptions();
+    const valid = options.some((row) => row.value === state.compareTarget);
+    if (!valid) {
+      state.compareTarget = options[0]?.value || "";
+    }
+    return options;
+  }
+
+  function metricCardHtml(metrics) {
+    return `
+      <div class="comparison-metric">
+        <span>情境後暴露</span>
+        <strong class="mono">${formatNumber(metrics.scenarioExposure)}</strong>
+      </div>
+      <div class="comparison-metric">
+        <span>風險改善</span>
+        <strong class="mono">${formatNumber(metrics.reductionPercent, 1)}%</strong>
+      </div>
+      <div class="comparison-metric">
+        <span>覆蓋指數</span>
+        <strong class="mono">${Math.round(metrics.coverageIndex)}</strong>
+      </div>
+      <div class="comparison-metric">
+        <span>IRAC 韌性</span>
+        <strong class="mono">${formatNumber(metrics.resilience, 1)}</strong>
+      </div>
+      <div class="comparison-metric">
+        <span>種植面積</span>
+        <strong class="mono">${formatNumber(metrics.selectedCountyCrop.area_ha)}</strong>
+      </div>
+      <div class="comparison-metric">
+        <span>涉及鄉鎮</span>
+        <strong class="mono">${Number(metrics.selectedCountyCrop.town_count || 0).toLocaleString("zh-TW")}</strong>
+      </div>
+    `;
+  }
+
+  function getComparisonNarratives(primary, comparison) {
+    const lowerExposure = primary.scenarioExposure <= comparison.scenarioExposure ? primary : comparison;
+    const strongerCoverage = primary.coverageIndex >= comparison.coverageIndex ? primary : comparison;
+    const largerScale = Number(primary.selectedCountyCrop.area_ha || 0) >= Number(comparison.selectedCountyCrop.area_ha || 0) ? primary : comparison;
+    const focusName = (metrics) => state.compareBy === "county"
+      ? `${metrics.county}・${metrics.crop}`
+      : `${metrics.crop}・${metrics.county}`;
+
+    return [
+      `${focusName(lowerExposure)} 的情境後暴露較低，適合作為風險較易收斂的先行示範對象。`,
+      `${focusName(strongerCoverage)} 的覆蓋與 IRAC 條件較佳，若要強調資材整備度，較適合優先列入政策溝通。`,
+      `${focusName(largerScale)} 的量體較大，一旦介入可帶來較高的政策可見度與示範效果。`,
+    ];
+  }
+
+  function renderComparisonModule(strategy) {
+    compareDimensionInput.value = state.compareBy;
+    const options = ensureComparisonState();
+    compareTargetInput.innerHTML = "";
+    options.forEach((row) => {
+      const option = document.createElement("option");
+      option.value = row.value;
+      option.textContent = row.label;
+      compareTargetInput.appendChild(option);
+    });
+    compareTargetInput.value = state.compareTarget;
+
+    const primary = getScenarioMetrics(state.county, state.crop, strategy, state.intensity);
+    if (!state.compareTarget) {
+      document.getElementById("scenario-primary-label").textContent = `${state.county}｜${state.crop}`;
+      document.getElementById("scenario-compare-label").textContent = "目前沒有可比較對象";
+      document.getElementById("scenario-primary-column").textContent = `${state.county}｜${state.crop}`;
+      document.getElementById("scenario-compare-column").textContent = "無";
+      document.getElementById("scenario-primary-card").innerHTML = metricCardHtml(primary);
+      document.getElementById("scenario-compare-card").innerHTML = "<div class=\"inline-meta\">請切換其他縣市或作物以啟用比較。</div>";
+      document.getElementById("scenario-compare-note").innerHTML = "<div class=\"inline-meta\">目前資料不足以形成第二個比較對象。</div>";
+      document.getElementById("scenario-compare-table-body").innerHTML = "";
+      renderEmptyState(compareChart, "目前沒有可比較的候選對象");
+      return;
+    }
+
+    const comparison = state.compareBy === "county"
+      ? getScenarioMetrics(state.compareTarget, state.crop, strategy, state.intensity)
+      : getScenarioMetrics(state.county, state.compareTarget, strategy, state.intensity);
+
+    const primaryLabel = `${primary.county}｜${primary.crop}`;
+    const comparisonLabel = `${comparison.county}｜${comparison.crop}`;
+    document.getElementById("scenario-primary-label").textContent = primaryLabel;
+    document.getElementById("scenario-compare-label").textContent = comparisonLabel;
+    document.getElementById("scenario-primary-column").textContent = primaryLabel;
+    document.getElementById("scenario-compare-column").textContent = comparisonLabel;
+    document.getElementById("scenario-primary-card").innerHTML = metricCardHtml(primary);
+    document.getElementById("scenario-compare-card").innerHTML = metricCardHtml(comparison);
+
+    const notes = getComparisonNarratives(primary, comparison);
+    const noteContainer = document.getElementById("scenario-compare-note");
+    noteContainer.innerHTML = "";
+    notes.forEach((text) => {
+      const item = document.createElement("div");
+      item.className = "comparison-note-item";
+      item.textContent = text;
+      noteContainer.appendChild(item);
+    });
+
+    const categories = ["風險控制", "覆蓋指數", "IRAC 韌性", "規模量體", "場域擴散"];
+    compareChart.setOption({
+      grid: { left: 96, right: 18, top: 16, bottom: 24, containLabel: true },
+      legend: { top: 0 },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: {
+        type: "value",
+        min: 0,
+        max: 100,
+        splitLine: { lineStyle: { color: "#d9d7c5" } },
+        axisLabel: { formatter: (value) => `${value}%` },
+      },
+      yAxis: {
+        type: "category",
+        data: categories,
+        axisTick: { show: false },
+      },
+      series: [
+        {
+          name: primaryLabel,
+          type: "bar",
+          data: [
+            primary.scores.riskControl,
+            primary.scores.coverage,
+            primary.scores.resilience,
+            primary.scores.scale,
+            primary.scores.spread,
+          ],
+          itemStyle: { color: "#2d5a3d", borderRadius: [0, 3, 3, 0] },
+          barMaxWidth: 14,
+        },
+        {
+          name: comparisonLabel,
+          type: "bar",
+          data: [
+            comparison.scores.riskControl,
+            comparison.scores.coverage,
+            comparison.scores.resilience,
+            comparison.scores.scale,
+            comparison.scores.spread,
+          ],
+          itemStyle: { color: "#4a7a8c", borderRadius: [0, 3, 3, 0] },
+          barMaxWidth: 14,
+        },
+      ],
+    });
+
+    const rows = [
+      {
+        label: "情境後暴露",
+        primary: formatNumber(primary.scenarioExposure),
+        comparison: formatNumber(comparison.scenarioExposure),
+        summary: primary.scenarioExposure <= comparison.scenarioExposure ? `${primaryLabel} 較低` : `${comparisonLabel} 較低`,
+      },
+      {
+        label: "風險改善幅度",
+        primary: `${formatNumber(primary.reductionPercent, 1)}%`,
+        comparison: `${formatNumber(comparison.reductionPercent, 1)}%`,
+        summary: primary.reductionPercent >= comparison.reductionPercent ? `${primaryLabel} 較佳` : `${comparisonLabel} 較佳`,
+      },
+      {
+        label: "Coverage Index",
+        primary: Math.round(primary.coverageIndex),
+        comparison: Math.round(comparison.coverageIndex),
+        summary: primary.coverageIndex >= comparison.coverageIndex ? `${primaryLabel} 覆蓋較完整` : `${comparisonLabel} 覆蓋較完整`,
+      },
+      {
+        label: "IRAC 韌性",
+        primary: formatNumber(primary.resilience, 1),
+        comparison: formatNumber(comparison.resilience, 1),
+        summary: primary.resilience >= comparison.resilience ? `${primaryLabel} 輪替彈性較高` : `${comparisonLabel} 輪替彈性較高`,
+      },
+      {
+        label: "種植面積",
+        primary: formatNumber(primary.selectedCountyCrop.area_ha),
+        comparison: formatNumber(comparison.selectedCountyCrop.area_ha),
+        summary: Number(primary.selectedCountyCrop.area_ha || 0) >= Number(comparison.selectedCountyCrop.area_ha || 0) ? `${primaryLabel} 量體較大` : `${comparisonLabel} 量體較大`,
+      },
+      {
+        label: "涉及鄉鎮",
+        primary: Number(primary.selectedCountyCrop.town_count || 0).toLocaleString("zh-TW"),
+        comparison: Number(comparison.selectedCountyCrop.town_count || 0).toLocaleString("zh-TW"),
+        summary: Number(primary.selectedCountyCrop.town_count || 0) >= Number(comparison.selectedCountyCrop.town_count || 0) ? `${primaryLabel} 擴散面較廣` : `${comparisonLabel} 擴散面較廣`,
+      },
+    ];
+    const tableBody = document.getElementById("scenario-compare-table-body");
+    tableBody.innerHTML = "";
+    rows.forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.label}</td>
+        <td class="mono">${row.primary}</td>
+        <td class="mono">${row.comparison}</td>
+        <td>${row.summary}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+  }
+
   function syncUrl() {
     const params = new URLSearchParams({
       county: state.county,
       crop: state.crop,
       strategy: state.strategy,
       intensity: String(state.intensity),
+      compare_by: state.compareBy,
     });
+    if (state.compareTarget) {
+      params.set("compare_target", state.compareTarget);
+    }
     history.replaceState({}, "", `/scenario?${params.toString()}`);
   }
 
@@ -601,6 +953,7 @@
       });
     }
 
+    renderComparisonModule(strategy);
     syncUrl();
   }
 
@@ -616,6 +969,15 @@
     state.strategy = event.target.value;
     render();
   });
+  compareDimensionInput.addEventListener("change", (event) => {
+    state.compareBy = event.target.value;
+    state.compareTarget = "";
+    render();
+  });
+  compareTargetInput.addEventListener("change", (event) => {
+    state.compareTarget = event.target.value;
+    render();
+  });
   intensityInput.addEventListener("input", (event) => {
     state.intensity = Number(event.target.value);
     render();
@@ -625,6 +987,7 @@
     exposureChart.resize();
     iracChart.resize();
     scorecardChart.resize();
+    compareChart.resize();
   });
 
   render();
