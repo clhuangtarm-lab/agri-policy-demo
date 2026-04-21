@@ -233,6 +233,12 @@
     return 8 + (Math.sqrt(Number(area || 0) / maxArea) * 20);
   }
 
+  function scaleSize(value, maxValue, minSize, maxSize) {
+    if (!maxValue || value <= 0) return minSize;
+    const ratio = Math.sqrt(value / maxValue);
+    return Number((minSize + ratio * (maxSize - minSize)).toFixed(1));
+  }
+
   function median(values) {
     const sorted = [...values].sort((a, b) => a - b);
     const middle = Math.floor(sorted.length / 2);
@@ -324,7 +330,7 @@
 
   const rankChart = echarts.init(document.getElementById("county-risk-chart"));
   rankChart.setOption({
-    grid: { left: 90, right: 18, top: 10, bottom: 24 },
+    grid: { left: 92, right: 18, top: 10, bottom: 24, containLabel: true },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     xAxis: {
       type: "value",
@@ -348,7 +354,7 @@
 
   const bubbleChart = echarts.init(document.getElementById("county-bubble-chart"));
   bubbleChart.setOption({
-    grid: { left: 52, right: 28, top: 20, bottom: 42 },
+    grid: { left: 56, right: 28, top: 20, bottom: 42, containLabel: true },
     tooltip: {
       formatter(params) {
         const row = params.data.row;
@@ -373,11 +379,12 @@
     },
     series: [{
       type: "scatter",
+      clip: true,
       data: countyMetrics.map((row) => ({
         value: [row.area_ha, row.exposure, row.density],
         name: row.county,
         row,
-        symbolSize: 16 + row.density * 1.1,
+        symbolSize: scaleSize(row.density, Math.max(...countyMetrics.map((item) => item.density), 1), 16, 34),
         itemStyle: { color: riskColor(row.exposure), opacity: 0.82 },
         label: row.exposure >= medianExposure ? { show: true, formatter: row.county, position: "top", color: "#3c4a34" } : undefined,
       })),
@@ -387,7 +394,7 @@
 
   const priorityChart = echarts.init(document.getElementById("county-priority-chart"));
   priorityChart.setOption({
-    grid: { left: 52, right: 24, top: 20, bottom: 42 },
+    grid: { left: 56, right: 24, top: 20, bottom: 42, containLabel: true },
     tooltip: {
       formatter(params) {
         const row = params.data.row;
@@ -411,11 +418,12 @@
     },
     series: [{
       type: "scatter",
+      clip: true,
       data: countyMetrics.map((row) => ({
         value: [row.density, row.exposure, row.area_ha],
         name: row.county,
         row,
-        symbolSize: 14 + Math.sqrt(row.area_ha / maxArea) * 26,
+        symbolSize: scaleSize(row.area_ha, maxArea, 14, 34),
         itemStyle: { color: riskColor(row.exposure), opacity: 0.8 },
         label: row.density >= medianDensity && row.exposure >= medianExposure
           ? { show: true, formatter: row.county, position: "top", color: "#3c4a34" }

@@ -205,51 +205,86 @@
   const formDistribution = {{ pesticide_summary.form_distribution | tojson }};
   const rotationAlerts = {{ pesticide_summary.rotation_alerts | tojson }};
 
+  function renderEmptyState(chart, message) {
+    chart.clear();
+    chart.setOption({
+      graphic: {
+        type: "text",
+        left: "center",
+        top: "middle",
+        style: {
+          text: message,
+          fill: "#6a6f5f",
+          font: "13px sans-serif",
+          textAlign: "center",
+        },
+      },
+    });
+  }
+
   const iracChart = echarts.init(document.getElementById("irac-distribution-chart"));
-  iracChart.setOption({
-    grid: { left: 70, right: 18, top: 10, bottom: 24 },
-    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
-    yAxis: { type: "category", data: iracDistribution.map((row) => row.label).reverse(), axisTick: { show: false } },
-    series: [{
-      type: "bar",
-      data: iracDistribution.map((row) => row.count).reverse(),
-      itemStyle: { color: "#2d5a3d", borderRadius: [0, 3, 3, 0] },
-      barMaxWidth: 16,
-    }],
-  });
+  if (!iracDistribution.length) {
+    renderEmptyState(iracChart, "查無 IRAC 分布資料");
+  } else {
+    iracChart.setOption({
+      grid: { left: 86, right: 18, top: 10, bottom: 24, containLabel: true },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+      yAxis: {
+        type: "category",
+        data: iracDistribution.map((row) => row.label).reverse(),
+        axisLabel: { width: 78, overflow: "truncate" },
+        axisTick: { show: false },
+      },
+      series: [{
+        type: "bar",
+        data: iracDistribution.map((row) => row.count).reverse(),
+        itemStyle: { color: "#2d5a3d", borderRadius: [0, 3, 3, 0] },
+        barMaxWidth: 16,
+      }],
+    });
+  }
 
   const formChart = echarts.init(document.getElementById("form-distribution-chart"));
-  formChart.setOption({
-    tooltip: { trigger: "item" },
-    legend: { bottom: 0 },
-    series: [{
-      type: "pie",
-      radius: ["38%", "68%"],
-      center: ["50%", "42%"],
-      data: formDistribution.map((row) => ({ name: row.label, value: row.count })),
-      label: { formatter: "{b}\n{c}" },
-      color: ["#2d5a3d", "#8ca84f", "#d9bc5a", "#c88544", "#b74e3a", "#4a7a8c", "#6a6f5f"],
-    }],
-  });
+  if (!formDistribution.length) {
+    renderEmptyState(formChart, "查無劑型分布資料");
+  } else {
+    formChart.setOption({
+      tooltip: { trigger: "item" },
+      legend: { bottom: 0 },
+      series: [{
+        type: "pie",
+        radius: ["38%", "68%"],
+        center: ["50%", "42%"],
+        data: formDistribution.map((row) => ({ name: row.label, value: row.count })),
+        label: { formatter: "{b}\n{c}" },
+        color: ["#2d5a3d", "#8ca84f", "#d9bc5a", "#c88544", "#b74e3a", "#4a7a8c", "#6a6f5f"],
+      }],
+    });
+  }
 
   const rotationChart = echarts.init(document.getElementById("rotation-alert-chart"));
-  rotationChart.setOption({
-    grid: { left: 88, right: 18, top: 12, bottom: 24 },
-    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
-    yAxis: {
-      type: "category",
-      data: rotationAlerts.map((row) => row.crop).reverse(),
-      axisTick: { show: false },
-    },
-    series: [{
-      type: "bar",
-      data: rotationAlerts.map((row) => row.rotation_alert_score).reverse(),
-      itemStyle: { color: "#b74e3a", borderRadius: [0, 3, 3, 0] },
-      barMaxWidth: 16,
-    }],
-  });
+  if (!rotationAlerts.length) {
+    renderEmptyState(rotationChart, "查無輪替預警資料");
+  } else {
+    rotationChart.setOption({
+      grid: { left: 112, right: 18, top: 12, bottom: 24, containLabel: true },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+      yAxis: {
+        type: "category",
+        data: rotationAlerts.map((row) => row.crop).reverse(),
+        axisLabel: { width: 104, overflow: "truncate" },
+        axisTick: { show: false },
+      },
+      series: [{
+        type: "bar",
+        data: rotationAlerts.map((row) => row.rotation_alert_score).reverse(),
+        itemStyle: { color: "#b74e3a", borderRadius: [0, 3, 3, 0] },
+        barMaxWidth: 16,
+      }],
+    });
+  }
 
   window.addEventListener("resize", () => {
     iracChart.resize();

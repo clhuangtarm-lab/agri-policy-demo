@@ -218,7 +218,7 @@
     const chart = echarts.init(document.getElementById(el));
     chart.setOption({
       animationDuration: 400,
-      grid: { left: 90, right: 18, top: 10, bottom: 24 },
+      grid: { left: 112, right: 18, top: 10, bottom: 24, containLabel: true },
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
       xAxis: {
         type: "value",
@@ -227,6 +227,7 @@
       yAxis: {
         type: "category",
         data: data.map((row) => row[nameKey]).reverse(),
+        axisLabel: { width: 104, overflow: "truncate" },
         axisTick: { show: false },
       },
       series: [{
@@ -244,13 +245,14 @@
 
   const cycleChart = echarts.init(document.getElementById("cycle-pattern-chart"));
   cycleChart.setOption({
-    grid: { left: 78, right: 18, top: 12, bottom: 24 },
+    grid: { left: 96, right: 18, top: 12, bottom: 24, containLabel: true },
     legend: { top: 0 },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
     yAxis: {
       type: "category",
       data: cycleAnalysis.counties.map((row) => row.county).reverse(),
+      axisLabel: { width: 88, overflow: "truncate" },
       axisTick: { show: false },
     },
     series: [

@@ -142,37 +142,62 @@
   const iracProfile = {{ detail.irac_profile | tojson }};
   const countyDistribution = {{ detail.county_distribution | tojson }};
 
+  function renderEmptyState(chart, message) {
+    chart.clear();
+    chart.setOption({
+      graphic: {
+        type: "text",
+        left: "center",
+        top: "middle",
+        style: {
+          text: message,
+          fill: "#6a6f5f",
+          font: "13px sans-serif",
+          textAlign: "center",
+        },
+      },
+    });
+  }
+
   const iracChart = echarts.init(document.getElementById("detail-irac-chart"));
-  iracChart.setOption({
-    grid: { left: 70, right: 18, top: 10, bottom: 24 },
-    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
-    yAxis: { type: "category", data: iracProfile.map((row) => row.code).reverse(), axisTick: { show: false } },
-    series: [{
-      type: "bar",
-      data: iracProfile.map((row) => row.count).reverse(),
-      itemStyle: { color: "#2d5a3d", borderRadius: [0, 3, 3, 0] },
-      barMaxWidth: 16,
-    }],
-  });
+  if (!iracProfile.length) {
+    renderEmptyState(iracChart, "目前沒有可用的 IRAC 結構資料");
+  } else {
+    iracChart.setOption({
+      grid: { left: 78, right: 18, top: 10, bottom: 24, containLabel: true },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+      yAxis: { type: "category", data: iracProfile.map((row) => row.code).reverse(), axisTick: { show: false } },
+      series: [{
+        type: "bar",
+        data: iracProfile.map((row) => row.count).reverse(),
+        itemStyle: { color: "#2d5a3d", borderRadius: [0, 3, 3, 0] },
+        barMaxWidth: 16,
+      }],
+    });
+  }
 
   const countyChart = echarts.init(document.getElementById("detail-county-chart"));
-  countyChart.setOption({
-    grid: { left: 90, right: 18, top: 10, bottom: 24 },
-    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
-    yAxis: {
-      type: "category",
-      data: countyDistribution.map((row) => row.county).reverse(),
-      axisTick: { show: false },
-    },
-    series: [{
-      type: "bar",
-      data: countyDistribution.map((row) => row.exposure_estimate).reverse(),
-      itemStyle: { color: "#b74e3a", borderRadius: [0, 3, 3, 0] },
-      barMaxWidth: 16,
-    }],
-  });
+  if (!countyDistribution.length) {
+    renderEmptyState(countyChart, "查無縣市分布資料");
+  } else {
+    countyChart.setOption({
+      grid: { left: 92, right: 18, top: 10, bottom: 24, containLabel: true },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+      yAxis: {
+        type: "category",
+        data: countyDistribution.map((row) => row.county).reverse(),
+        axisTick: { show: false },
+      },
+      series: [{
+        type: "bar",
+        data: countyDistribution.map((row) => row.exposure_estimate).reverse(),
+        itemStyle: { color: "#b74e3a", borderRadius: [0, 3, 3, 0] },
+        barMaxWidth: 16,
+      }],
+    });
+  }
 
   window.addEventListener("resize", () => {
     iracChart.resize();
