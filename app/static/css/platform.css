@@ -644,6 +644,41 @@ a:hover {
   color: var(--ink);
 }
 
+.presentation-note {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--forest);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 245, 239, 0.9));
+  display: grid;
+  gap: 8px;
+}
+
+.presentation-note-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.presentation-note-body {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.presentation-note-body strong,
+.figure-caption strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.figure-caption {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--rule);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
 .mobile-only {
   display: none;
 }
