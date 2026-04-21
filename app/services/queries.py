@@ -1002,77 +1002,51 @@ def get_traceability_flow(
             "notes": ["未指定作物，無法建立履歷流向圖。"],
         }
 
-    def county_scope_rows(use_status: bool) -> list[dict]:
-        conditions = [
-            "TRIM(COALESCE(pr.crop_root, '')) <> ''",
-            "TRIM(COALESCE(tp.Address, '')) <> ''",
-            "pr.crop_root = ?",
-        ]
-        params: list[object] = [crop]
-        if use_status and status:
-            conditions.append("tp.Status = ?")
-            params.append(status)
-        return fetchall(
-            f"""
-            SELECT SUBSTR(tp.Address, 1, 3) AS county,
-                   COUNT(DISTINCT pr.TraceCode) AS trace_count
-            FROM traceability_product pr
-            JOIN traceability_producer tp
-              ON tp.TraceCode = pr.TraceCode
-            WHERE {' AND '.join(conditions)}
-            GROUP BY SUBSTR(tp.Address, 1, 3)
-            HAVING TRIM(COALESCE(SUBSTR(tp.Address, 1, 3), '')) <> ''
-            ORDER BY trace_count DESC, county ASC
-            """,
-            tuple(params),
-        )
+    county_rows = fetchall(
+        """
+        SELECT SUBSTR(tp.Address, 1, 3) AS county,
+               COUNT(DISTINCT pr.TraceCode) AS trace_count
+        FROM traceability_product pr
+        JOIN traceability_producer tp
+          ON tp.TraceCode = pr.TraceCode
+        WHERE TRIM(COALESCE(pr.crop_root, '')) <> ''
+          AND TRIM(COALESCE(tp.Address, '')) <> ''
+          AND pr.crop_root = ?
+        GROUP BY SUBSTR(tp.Address, 1, 3)
+        HAVING TRIM(COALESCE(SUBSTR(tp.Address, 1, 3), '')) <> ''
+        ORDER BY trace_count DESC, county ASC
+        """,
+        (crop,),
+    )
+    status_rows = fetchall(
+        """
+        SELECT tp.Status AS status,
+               COUNT(DISTINCT pr.TraceCode) AS trace_count
+        FROM traceability_product pr
+        JOIN traceability_producer tp
+          ON tp.TraceCode = pr.TraceCode
+        WHERE TRIM(COALESCE(pr.crop_root, '')) <> ''
+          AND TRIM(COALESCE(tp.Status, '')) <> ''
+          AND pr.crop_root = ?
+        GROUP BY tp.Status
+        ORDER BY trace_count DESC, tp.Status ASC
+        """,
+        (crop,),
+    )
 
-    def status_scope_rows(use_county: bool) -> list[dict]:
-        conditions = [
-            "TRIM(COALESCE(pr.crop_root, '')) <> ''",
-            "TRIM(COALESCE(tp.Status, '')) <> ''",
-            "pr.crop_root = ?",
-        ]
-        params: list[object] = [crop]
-        if use_county and county:
-            conditions.append("SUBSTR(tp.Address, 1, 3) = ?")
-            params.append(county)
-        return fetchall(
-            f"""
-            SELECT tp.Status AS status,
-                   COUNT(DISTINCT pr.TraceCode) AS trace_count
-            FROM traceability_product pr
-            JOIN traceability_producer tp
-              ON tp.TraceCode = pr.TraceCode
-            WHERE {' AND '.join(conditions)}
-            GROUP BY tp.Status
-            ORDER BY trace_count DESC, tp.Status ASC
-            """,
-            tuple(params),
-        )
-
-    left_rows = county_scope_rows(use_status=True)
     notes: list[str] = []
-    if not left_rows:
-        left_rows = county_scope_rows(use_status=False)
-        if status:
-            notes.append(f"左側縣市流向找不到「{status}」狀態資料，已改用該作物全部履歷狀態。")
-
+    left_rows = county_rows[:county_limit]
     if selected_county := (county or "").strip():
-        selected_row = next((row for row in left_rows if row["county"] == selected_county), None)
-        remaining = [row for row in left_rows if row["county"] != selected_county]
+        selected_row = next((row for row in county_rows if row["county"] == selected_county), None)
         if selected_row:
+            remaining = [row for row in county_rows if row["county"] != selected_county]
             left_rows = [selected_row, *remaining[: max(county_limit - 1, 0)]]
         else:
-            left_rows = left_rows[:county_limit]
-    else:
-        left_rows = left_rows[:county_limit]
+            notes.append(f"目前所選縣市「{selected_county}」不在此作物主要履歷分布前段。")
 
-    right_rows = status_scope_rows(use_county=True)
-    if not right_rows:
-        right_rows = status_scope_rows(use_county=False)
-        if county:
-            notes.append(f"右側狀態流向找不到「{county}」縣市資料，已改用全國該作物狀態結構。")
+    right_rows = status_rows
+    if status and not any(row["status"] == status for row in right_rows):
+        notes.append(f"目前所選狀態「{status}」在此作物下沒有對應履歷碼。")
 
     crop_node = f"作物：{crop}"
     nodes: list[dict] = [{"name": crop_node, "node_type": "crop", "selected": True}]
@@ -1130,6 +1104,8 @@ def get_traceability_flow(
         "notes": notes,
         "county_rows": left_rows,
         "status_rows": right_rows,
+        "selected_county": county or "",
+        "selected_status": status or "",
     }
 
 

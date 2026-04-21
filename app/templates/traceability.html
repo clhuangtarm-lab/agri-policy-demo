@@ -166,14 +166,14 @@
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">履歷流向 Sankey</div>
-        <div class="panel-meta">左側看所選狀態在各縣市的履歷碼分布，右側看所選縣市內該作物的狀態結構。</div>
+      <div class="panel-title">履歷結構流向</div>
+        <div class="panel-meta">以同一批作物履歷碼為基礎，左側呈現縣市分布，右側呈現狀態分布。</div>
       </div>
     </div>
     <div class="panel-body">
       <div id="traceability-flow-chart" class="chart chart-large"></div>
       <div class="inline-meta" id="traceability-flow-summary"></div>
-      <div class="figure-caption"><strong>解讀：</strong>一張圖同時串起跨縣市分布與狀態結構，可用來觀察履歷採用與續留樣態。</div>
+      <div class="figure-caption"><strong>解讀：</strong>本圖用同一批作物履歷碼，同步對照縣市分布與狀態結構，協助辨識履歷採用與續留樣態。</div>
     </div>
   </article>
 
@@ -322,12 +322,16 @@
 
   function renderPracticeCharts(practiceProfile) {
     cultivationChart.setOption({
-      grid: { left: 88, right: 18, top: 12, bottom: 24 },
+      grid: { left: 132, right: 24, top: 12, bottom: 24, containLabel: true },
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
       xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
       yAxis: {
         type: "category",
         data: practiceProfile.cultivation.map((row) => row.label).reverse(),
+        axisLabel: {
+          width: 112,
+          overflow: "truncate",
+        },
         axisTick: { show: false },
       },
       series: [{
@@ -378,9 +382,11 @@
     }
 
     const notes = flowProfile.notes || [];
+    const selectedCounty = flowProfile.selected_county || state.county;
+    const selectedStatus = flowProfile.selected_status || state.status;
     summaryEl.textContent = notes.length
       ? notes.join(" ")
-      : `左側顯示「${state.status}」狀態下 ${state.crop} 的主要縣市流量；右側顯示 ${state.county} 內 ${state.crop} 的履歷狀態分布。`;
+      : `左側為 ${state.crop} 履歷碼的主要縣市分布；右側為 ${state.crop} 的履歷狀態分布。圖中以色彩標示目前選取的縣市「${selectedCounty}」與狀態「${selectedStatus}」。`;
 
     flowChart.setOption({
       tooltip: {
@@ -394,20 +400,23 @@
       },
       series: [{
         type: "sankey",
-        left: 16,
-        right: 20,
-        top: 20,
+        nodeAlign: "justify",
+        left: 28,
+        right: 48,
+        top: 56,
         bottom: 24,
-        nodeGap: 14,
+        nodeWidth: 22,
+        nodeGap: 18,
         draggable: false,
         emphasis: { focus: "adjacency" },
         lineStyle: {
           color: "gradient",
-          curveness: 0.46,
-          opacity: 0.35,
+          curveness: 0.5,
+          opacity: 0.42,
         },
         label: {
           color: "#3c4a34",
+          fontSize: 12,
           formatter: (params) => flowNodeLabel(params.data.name),
         },
         data: flowProfile.nodes.map((node) => ({
@@ -422,6 +431,40 @@
           },
         })),
       }],
+      graphic: [
+        {
+          type: "text",
+          left: 24,
+          top: 16,
+          style: {
+            text: "縣市分布",
+            fill: "#6a6f5f",
+            font: "12px sans-serif",
+          },
+        },
+        {
+          type: "text",
+          left: "46%",
+          top: 16,
+          style: {
+            text: "作物",
+            fill: "#6a6f5f",
+            font: "12px sans-serif",
+            textAlign: "center",
+          },
+        },
+        {
+          type: "text",
+          right: 20,
+          top: 16,
+          style: {
+            text: "狀態分布",
+            fill: "#6a6f5f",
+            font: "12px sans-serif",
+            textAlign: "right",
+          },
+        },
+      ],
     });
   }
 

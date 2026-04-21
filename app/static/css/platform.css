@@ -469,6 +469,15 @@ a:hover {
   height: 420px;
 }
 
+#traceability-flow-chart {
+  height: 480px;
+}
+
+#traceability-cultivation-chart,
+#traceability-fertilizer-chart {
+  min-height: 320px;
+}
+
 .filter-bar {
   display: flex;
   align-items: center;
