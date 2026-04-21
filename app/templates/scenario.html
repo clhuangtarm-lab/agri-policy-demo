@@ -4,8 +4,8 @@
 <section class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">互動條件設定</div>
-      <div class="panel-meta">以現況資料為基線，模擬政策介入後的暴露、覆蓋與 IRAC 韌性變化。</div>
+      <div class="panel-title">情境設定</div>
+      <div class="panel-meta">選擇縣市、作物、策略與強度，快速比較政策介入前後的風險變化。</div>
     </div>
     <div class="panel-meta">Scenario Sandbox / mixed architecture island</div>
   </div>
@@ -25,7 +25,7 @@
         {% endfor %}
       </select>
 
-      <label class="filter-label" for="scenario-strategy">方案</label>
+      <label class="filter-label" for="scenario-strategy">策略</label>
       <select class="filter-input scenario-select" id="scenario-strategy">
         {% for row in scenario.strategies %}
           <option value="{{ row.id }}" {% if row.id == scenario.selected_strategy %}selected{% endif %}>{{ row.label }}</option>
@@ -40,7 +40,7 @@
     </form>
 
     <div class="chip-row">
-      <span class="theme-chip">方案僅為情境估計，非真實政策成效</span>
+      <span class="theme-chip">情境模擬為相對比較，不代表真實政策成效</span>
       <span class="theme-chip" id="scenario-focus-chip"></span>
       <span class="theme-chip" id="scenario-crop-chip"></span>
       <span class="theme-chip" id="scenario-county-chip"></span>
@@ -48,8 +48,9 @@
 
     <div class="method-note">
       <strong>方法註記</strong>
-      <span>加權暴露 = 鄉鎮或縣市暴露值 × 作物關聯權重 × 情境介入折減。</span>
-      <span>Coverage Index 與 IRAC 韌性估計為情境指標，用於比較相對變化，不代表真實觀測值。</span>
+      <span>加權暴露 = 基礎暴露值 × 作物關聯權重 × 情境介入折減。</span>
+      <span>Coverage Index 與 IRAC 韌性為情境指標，用於比較相對變化，不代表實際觀測值。</span>
+      <span>本頁新增的政策前後比較圖，將不同單位的指標轉成相對分數，方便判讀改善幅度。</span>
     </div>
   </div>
 </section>
@@ -58,12 +59,12 @@
   <article class="kpi-card">
     <div class="kpi-label">Baseline Exposure</div>
     <div class="kpi-value mono" id="kpi-baseline">0.0</div>
-    <div class="kpi-meta">縣市 x 作物暴露估計</div>
+    <div class="kpi-meta">縣市 x 作物基線暴露估計</div>
   </article>
   <article class="kpi-card tone-info">
     <div class="kpi-label">Scenario Exposure</div>
     <div class="kpi-value mono" id="kpi-scenario">0.0</div>
-    <div class="kpi-meta">套用策略後估計值</div>
+    <div class="kpi-meta">套用策略後的暴露估計</div>
   </article>
   <article class="kpi-card tone-warn">
     <div class="kpi-label">Risk Reduction</div>
@@ -73,7 +74,7 @@
   <article class="kpi-card">
     <div class="kpi-label">Coverage Index</div>
     <div class="kpi-value mono" id="kpi-coverage">0</div>
-    <div class="kpi-meta">依現有登記與方案強度估計</div>
+    <div class="kpi-meta">依登記量與策略 bonus 估計</div>
   </article>
   <article class="kpi-card tone-info">
     <div class="kpi-label">Priority Towns</div>
@@ -82,12 +83,38 @@
   </article>
 </section>
 
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">政策前後比較圖</div>
+        <div class="panel-meta">將暴露、覆蓋與 IRAC 韌性轉成相對分數，直觀顯示介入後變化。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="scenario-scorecard-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">IRAC 結構模擬</div>
+        <div class="panel-meta">基線維持真實結構，情境後分散效果依策略與強度估計。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="scenario-irac-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+</section>
+
 <section class="grid-main">
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">跨縣市暴露對比</div>
-        <div class="panel-meta">以所選作物為主軸，比較各縣市基線與方案後的暴露差異。</div>
+        <div class="panel-title">跨縣市情境比較</div>
+        <div class="panel-meta">比較所選作物在各縣市的基線暴露與情境後暴露變化。</div>
       </div>
       <a class="text-link" id="scenario-detail-link" href="/detail">查看作物深度頁</a>
     </div>
@@ -101,7 +128,7 @@
       <div class="panel-head">
         <div>
           <div class="panel-title">政策建議摘要</div>
-          <div class="panel-meta">隱性串接三大主題：空間熱點、覆蓋缺口、IRAC 輪替。</div>
+          <div class="panel-meta">把空間熱點、覆蓋缺口與 IRAC 輪替整合成可說明的建議句。</div>
         </div>
       </div>
       <div class="panel-body findings-list" id="scenario-recommendations"></div>
@@ -111,7 +138,7 @@
       <div class="panel-head">
         <div>
           <div class="panel-title">關聯指標</div>
-          <div class="panel-meta">快速說明當前情境的空間、作物與藥劑面向。</div>
+          <div class="panel-meta">提供縣市暴露、作物暴露、IRAC 韌性與登記數等補充指標。</div>
         </div>
       </div>
       <div class="panel-body">
@@ -125,7 +152,7 @@
             <div class="stat-value" id="scenario-crop-exposure">0.0</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">IRAC 韌性估計</div>
+            <div class="stat-label">IRAC 韌性</div>
             <div class="stat-value" id="scenario-irac-resilience">0.0</div>
           </div>
           <div class="stat-card">
@@ -138,40 +165,26 @@
   </div>
 </section>
 
-<section class="grid-two">
-  <article class="panel">
-    <div class="panel-head">
-      <div>
-        <div class="panel-title">IRAC 結構模擬</div>
-        <div class="panel-meta">基線維持真實結構，情境後分散效果由策略與強度估計。</div>
-      </div>
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">優先鄉鎮清單</div>
+      <div class="panel-meta">依加權暴露估計排序，協助說明優先巡查或輔導對象。</div>
     </div>
-    <div class="panel-body">
-      <div id="scenario-irac-chart" class="chart chart-medium"></div>
-    </div>
-  </article>
-
-  <article class="panel">
-    <div class="panel-head">
-      <div>
-        <div class="panel-title">優先鄉鎮清單</div>
-        <div class="panel-meta">所選縣市內的巡查排序，會優先凸顯與所選作物相關的熱點。</div>
-      </div>
-    </div>
-    <div class="panel-body panel-body-tight">
-      <table class="data-table compact">
-        <thead>
-          <tr>
-            <th>鄉鎮</th>
-            <th>主作物</th>
-            <th class="num">加權暴露</th>
-            <th>建議</th>
-          </tr>
-        </thead>
-        <tbody id="scenario-township-body"></tbody>
-      </table>
-    </div>
-  </article>
+  </div>
+  <div class="panel-body panel-body-tight">
+    <table class="data-table compact">
+      <thead>
+        <tr>
+          <th>鄉鎮</th>
+          <th>主作物</th>
+          <th class="num">加權暴露</th>
+          <th>建議</th>
+        </tr>
+      </thead>
+      <tbody id="scenario-township-body"></tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}
 
@@ -203,6 +216,7 @@
 
   const exposureChart = echarts.init(document.getElementById("scenario-exposure-chart"));
   const iracChart = echarts.init(document.getElementById("scenario-irac-chart"));
+  const scorecardChart = echarts.init(document.getElementById("scenario-scorecard-chart"));
 
   function formatNumber(value, digits = 1) {
     return Number(value || 0).toLocaleString("zh-TW", {
@@ -288,7 +302,7 @@
         const cropMatch = row.top_crop === crop;
         const weight = cropMatch ? 1.2 : 0.72;
         const weightedExposure = Number((row.exposure * weight * (1 - effectRatio * (cropMatch ? 0.9 : 0.45))).toFixed(1));
-        let action = "追蹤";
+        let action = "持續追蹤";
         if (weightedExposure >= 120) action = "立即巡查";
         else if (weightedExposure >= 60) action = "優先輔導";
         return {
@@ -316,7 +330,7 @@
       {
         tone: "finding-mid",
         title: `${cropRow.crop} 覆蓋缺口補強`,
-        body: `目前登記藥劑 ${cropRow.registration_count} 項，模擬後覆蓋指數約 ${Math.round(coverageIndex)}，可作為補足防治資源的簡報指標。`,
+        body: `目前登記藥劑 ${cropRow.registration_count} 項，模擬後覆蓋指數約 ${Math.round(coverageIndex)}，可作為補足資材的簡報指標。`,
       },
       {
         tone: "finding-mid",
@@ -343,7 +357,9 @@
     const selectedCountyCrop = getSelectedCountyCropRow(state.county, state.crop);
     const effectRatio = getEffectRatio(strategy, state.intensity);
     const scenarioExposure = selectedCountyCrop.exposure * (1 - effectRatio);
+    const baselineCoverage = getCoverageIndex(cropRow, { coverage_bonus: 0 }, 0);
     const coverageIndex = getCoverageIndex(cropRow, strategy, state.intensity);
+    const baselineResilience = Number(cropRow.irac_diversity || 0);
     const resilience = getIracResilience(cropRow, strategy, state.intensity);
     const priorityRows = getTownshipPriorities(state.county, state.crop, strategy, state.intensity);
     const exposureRows = getCountyCropRows(state.crop).slice(0, 8);
@@ -437,6 +453,45 @@
       ],
     });
 
+    scorecardChart.setOption({
+      grid: { left: 110, right: 18, top: 16, bottom: 24 },
+      legend: { top: 0 },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: {
+        type: "value",
+        splitLine: { lineStyle: { color: "#d9d7c5" } },
+      },
+      yAxis: {
+        type: "category",
+        data: ["暴露值", "覆蓋指數", "IRAC 韌性"],
+        axisTick: { show: false },
+      },
+      series: [
+        {
+          name: "基線",
+          type: "bar",
+          data: [
+            selectedCountyCrop.exposure,
+            baselineCoverage,
+            baselineResilience,
+          ],
+          itemStyle: { color: "#b8b69e", borderRadius: [0, 3, 3, 0] },
+          barMaxWidth: 16,
+        },
+        {
+          name: "情境後",
+          type: "bar",
+          data: [
+            scenarioExposure,
+            coverageIndex,
+            resilience,
+          ],
+          itemStyle: { color: "#4a7a8c", borderRadius: [0, 3, 3, 0] },
+          barMaxWidth: 16,
+        },
+      ],
+    });
+
     const scenarioProfile = buildScenarioProfile(iracProfiles[state.crop] || [], strategy, state.intensity);
     iracChart.setOption({
       grid: { left: 48, right: 18, top: 16, bottom: 36 },
@@ -495,6 +550,7 @@
   window.addEventListener("resize", () => {
     exposureChart.resize();
     iracChart.resize();
+    scorecardChart.resize();
   });
 
   render();

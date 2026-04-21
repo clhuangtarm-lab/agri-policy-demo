@@ -2,20 +2,64 @@
 {% block title %}作物風險矩陣{% endblock %}
 {% block content %}
 <form class="filter-bar" method="get" action="/theme3/coverage">
-  <label class="filter-label" for="q">作物查詢</label>
+  <label class="filter-label" for="q">作物搜尋</label>
   <input class="filter-input" id="q" type="text" name="q" value="{{ crop_matrix.query }}" placeholder="輸入作物名稱" />
-  <button class="icon-btn" type="submit">套用</button>
+  <button class="icon-btn" type="submit">搜尋</button>
   {% if crop_matrix.query %}
     <a class="text-link" href="/theme3/coverage">清除</a>
   {% endif %}
 </form>
 
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">視覺化優先順序</div>
+      <div class="panel-meta">本頁優先放入最能支援政策排序的兩種視覺化：泡泡圖與四象限矩陣。</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="method-note">
+      <strong>優先 1 / 泡泡圖</strong>
+      <span>用來同時看「暴露值、IRAC 多樣性、作物面積」，快速辨識量體大且韌性不足的作物。</span>
+      <span>泡泡大小代表作物面積，顏色代表覆蓋等級，越靠右表示暴露越高。</span>
+      <strong>優先 2 / 四象限矩陣</strong>
+      <span>用暴露值與可用 IRAC 碼數形成四象限，右上角代表高暴露但可輪替資材相對不足，最適合作為優先介入區。</span>
+    </div>
+  </div>
+</section>
+
 <section class="grid-two">
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">高風險暴露前十作物</div>
-        <div class="panel-meta">主題二 / 用真資料呈現高風險占比與加權暴露</div>
+        <div class="panel-title">政策優先泡泡圖</div>
+        <div class="panel-meta">X 軸為暴露值，Y 軸為 IRAC 多樣性，泡泡大小為作物面積。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="coverage-bubble-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">四象限介入矩陣</div>
+        <div class="panel-meta">X 軸為可用 IRAC 碼數，Y 軸為暴露值；以中位數切出政策象限。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="coverage-quadrant-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+</section>
+
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">高風險作物暴露排行</div>
+        <div class="panel-meta">挑出暴露值最高的作物，作為矩陣頁的第一層排序。</div>
       </div>
     </div>
     <div class="panel-body">
@@ -26,8 +70,8 @@
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">覆蓋充裕度分布</div>
-        <div class="panel-meta">以 coverage_risk 彙整支撐標案中的缺口辨識</div>
+        <div class="panel-title">覆蓋等級分布</div>
+        <div class="panel-meta">快速查看目前覆蓋等級的整體結構。</div>
       </div>
     </div>
     <div class="panel-body">
@@ -41,7 +85,7 @@
     <div class="panel-head">
       <div>
         <div class="panel-title">作物風險矩陣</div>
-        <div class="panel-meta">整合作物面積、暴露、登記、覆蓋與 IRAC 多樣性</div>
+        <div class="panel-meta">結合作物面積、暴露值、登記藥劑數與 IRAC 結構，支援政策評估與 drill-down。</div>
       </div>
     </div>
     <div class="panel-body panel-body-tight">
@@ -50,11 +94,11 @@
           <tr>
             <th>作物</th>
             <th class="num">面積</th>
-            <th class="num">高風險占比</th>
-            <th class="num">暴露</th>
-            <th class="num">有效登記</th>
-            <th>覆蓋充裕度</th>
-            <th class="num">IRAC 種數</th>
+            <th class="num">高風險比例</th>
+            <th class="num">暴露值</th>
+            <th class="num">登記數</th>
+            <th>覆蓋等級</th>
+            <th class="num">IRAC 碼數</th>
             <th>IRAC 代碼</th>
           </tr>
         </thead>
@@ -80,8 +124,8 @@
     <article class="panel">
       <div class="panel-head">
         <div>
-          <div class="panel-title">低覆蓋優先名單</div>
-          <div class="panel-meta">從 coverage_risk 找出登記數偏低作物</div>
+          <div class="panel-title">低覆蓋缺口名單</div>
+          <div class="panel-meta">用來快速指向需要補助或補足輪替資材的作物。</div>
         </div>
       </div>
       <div class="panel-body panel-body-tight">
@@ -109,8 +153,8 @@
     <article class="panel">
       <div class="panel-head">
         <div>
-          <div class="panel-title">脆弱作物提示</div>
-          <div class="panel-meta">主題二 / 以低登記與低多樣性作為缺口示範</div>
+          <div class="panel-title">脆弱作物觀察</div>
+          <div class="panel-meta">將風險說明轉成可直接引用的評估句，方便政策簡報使用。</div>
         </div>
       </div>
       <div class="panel-body findings-list">
@@ -118,7 +162,7 @@
           <div class="finding finding-mid">
             <div class="finding-title">{{ row.crop }}</div>
             <div class="finding-body">{{ row.risk_note }}</div>
-            <div class="inline-meta">有效登記 {{ row.registration_count }} / IRAC 多樣性 {{ row.irac_diversity }}</div>
+            <div class="inline-meta">登記藥劑 {{ row.registration_count }} / IRAC 多樣性 {{ row.irac_diversity }}</div>
           </div>
         {% endfor %}
       </div>
@@ -132,6 +176,21 @@
   const highRisk = {{ crop_matrix.high_risk | tojson }};
   const lowCoverage = {{ crop_matrix.low_coverage | tojson }};
   const coverageLevels = {{ crop_matrix.coverage_levels | tojson }};
+  const matrixRows = {{ crop_matrix.rows | tojson }};
+
+  function median(values) {
+    const list = [...values].sort((a, b) => a - b);
+    if (!list.length) return 0;
+    const mid = Math.floor(list.length / 2);
+    return list.length % 2 ? list[mid] : (list[mid - 1] + list[mid]) / 2;
+  }
+
+  function coverageColor(level) {
+    if ((level || "").includes("高")) return "#2d5a3d";
+    if ((level || "").includes("中")) return "#c8a951";
+    if ((level || "").includes("低")) return "#b74e3a";
+    return "#8ca84f";
+  }
 
   const riskChart = echarts.init(document.getElementById("coverage-risk-chart"));
   riskChart.setOption({
@@ -161,9 +220,103 @@
     }],
   });
 
+  const bubbleChart = echarts.init(document.getElementById("coverage-bubble-chart"));
+  bubbleChart.setOption({
+    tooltip: {
+      formatter: (params) => {
+        const row = matrixRows[params.dataIndex];
+        return [
+          `<strong>${row.crop}</strong>`,
+          `暴露值：${Number(row.exposure).toLocaleString("zh-TW", { maximumFractionDigits: 1 })}`,
+          `IRAC 多樣性：${Number(row.irac_diversity).toLocaleString("zh-TW", { maximumFractionDigits: 1 })}`,
+          `面積：${Number(row.area_ha).toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 公頃`,
+          `覆蓋等級：${row.coverage_level}`,
+        ].join("<br>");
+      },
+    },
+    grid: { left: 48, right: 18, top: 16, bottom: 36 },
+    xAxis: {
+      type: "value",
+      name: "暴露值",
+      splitLine: { lineStyle: { color: "#d9d7c5" } },
+    },
+    yAxis: {
+      type: "value",
+      name: "IRAC 多樣性",
+      splitLine: { lineStyle: { color: "#d9d7c5" } },
+    },
+    series: [{
+      type: "scatter",
+      symbolSize: (value) => Math.max(12, Math.sqrt(value[2]) * 1.2),
+      data: matrixRows.map((row) => [row.exposure, row.irac_diversity, row.area_ha]),
+      itemStyle: {
+        color: (params) => coverageColor(matrixRows[params.dataIndex].coverage_level),
+        opacity: 0.82,
+      },
+      emphasis: { scale: true },
+    }],
+  });
+
+  const exposureMedian = median(matrixRows.map((row) => Number(row.exposure || 0)));
+  const codeMedian = median(matrixRows.map((row) => Number(row.coverage_irac_code_count || 0)));
+  const quadrantChart = echarts.init(document.getElementById("coverage-quadrant-chart"));
+  quadrantChart.setOption({
+    tooltip: {
+      formatter: (params) => {
+        const row = matrixRows[params.dataIndex];
+        return [
+          `<strong>${row.crop}</strong>`,
+          `可用 IRAC 碼數：${row.coverage_irac_code_count}`,
+          `暴露值：${Number(row.exposure).toLocaleString("zh-TW", { maximumFractionDigits: 1 })}`,
+          `登記數：${Number(row.registration_count).toLocaleString("zh-TW")}`,
+          `建議：${row.exposure >= exposureMedian && row.coverage_irac_code_count <= codeMedian ? "優先介入" : "持續追蹤"}`,
+        ].join("<br>");
+      },
+    },
+    grid: { left: 48, right: 18, top: 16, bottom: 36 },
+    xAxis: {
+      type: "value",
+      name: "可用 IRAC 碼數",
+      splitLine: { lineStyle: { color: "#d9d7c5" } },
+    },
+    yAxis: {
+      type: "value",
+      name: "暴露值",
+      splitLine: { lineStyle: { color: "#d9d7c5" } },
+    },
+    series: [{
+      type: "scatter",
+      symbolSize: (value) => Math.max(10, Math.sqrt(value[2]) * 1.6),
+      data: matrixRows.map((row) => [row.coverage_irac_code_count, row.exposure, row.registration_count]),
+      itemStyle: {
+        color: (params) => {
+          const row = matrixRows[params.dataIndex];
+          return row.exposure >= exposureMedian && row.coverage_irac_code_count <= codeMedian ? "#b74e3a" : "#4a7a8c";
+        },
+      },
+      markLine: {
+        silent: true,
+        symbol: "none",
+        lineStyle: { color: "#9a9e8e", type: "dashed" },
+        data: [
+          { xAxis: codeMedian },
+          { yAxis: exposureMedian },
+        ],
+      },
+    }],
+    graphic: [
+      { type: "text", left: "8%", top: "8%", style: { text: "低碼數 / 高暴露\n優先介入", fill: "#b74e3a", font: "12px sans-serif" } },
+      { type: "text", right: "8%", top: "8%", style: { text: "高碼數 / 高暴露\n持續監測", fill: "#2d5a3d", font: "12px sans-serif", textAlign: "right" } },
+      { type: "text", left: "8%", bottom: "12%", style: { text: "低碼數 / 低暴露\n預防補強", fill: "#c88544", font: "12px sans-serif" } },
+      { type: "text", right: "8%", bottom: "12%", style: { text: "高碼數 / 低暴露\n基線追蹤", fill: "#4a7a8c", font: "12px sans-serif", textAlign: "right" } },
+    ],
+  });
+
   window.addEventListener("resize", () => {
     riskChart.resize();
     levelChart.resize();
+    bubbleChart.resize();
+    quadrantChart.resize();
   });
 </script>
 {% endblock %}
