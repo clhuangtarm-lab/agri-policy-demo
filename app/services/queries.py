@@ -989,6 +989,150 @@ def get_traceability_practice_profile(
     }
 
 
+def get_traceability_flow(
+    county: str | None = None,
+    crop: str | None = None,
+    status: str | None = None,
+    county_limit: int = 8,
+) -> dict:
+    if not crop:
+        return {
+            "nodes": [],
+            "links": [],
+            "notes": ["未指定作物，無法建立履歷流向圖。"],
+        }
+
+    def county_scope_rows(use_status: bool) -> list[dict]:
+        conditions = [
+            "TRIM(COALESCE(pr.crop_root, '')) <> ''",
+            "TRIM(COALESCE(tp.Address, '')) <> ''",
+            "pr.crop_root = ?",
+        ]
+        params: list[object] = [crop]
+        if use_status and status:
+            conditions.append("tp.Status = ?")
+            params.append(status)
+        return fetchall(
+            f"""
+            SELECT SUBSTR(tp.Address, 1, 3) AS county,
+                   COUNT(DISTINCT pr.TraceCode) AS trace_count
+            FROM traceability_product pr
+            JOIN traceability_producer tp
+              ON tp.TraceCode = pr.TraceCode
+            WHERE {' AND '.join(conditions)}
+            GROUP BY SUBSTR(tp.Address, 1, 3)
+            HAVING TRIM(COALESCE(SUBSTR(tp.Address, 1, 3), '')) <> ''
+            ORDER BY trace_count DESC, county ASC
+            """,
+            tuple(params),
+        )
+
+    def status_scope_rows(use_county: bool) -> list[dict]:
+        conditions = [
+            "TRIM(COALESCE(pr.crop_root, '')) <> ''",
+            "TRIM(COALESCE(tp.Status, '')) <> ''",
+            "pr.crop_root = ?",
+        ]
+        params: list[object] = [crop]
+        if use_county and county:
+            conditions.append("SUBSTR(tp.Address, 1, 3) = ?")
+            params.append(county)
+        return fetchall(
+            f"""
+            SELECT tp.Status AS status,
+                   COUNT(DISTINCT pr.TraceCode) AS trace_count
+            FROM traceability_product pr
+            JOIN traceability_producer tp
+              ON tp.TraceCode = pr.TraceCode
+            WHERE {' AND '.join(conditions)}
+            GROUP BY tp.Status
+            ORDER BY trace_count DESC, tp.Status ASC
+            """,
+            tuple(params),
+        )
+
+    left_rows = county_scope_rows(use_status=True)
+    notes: list[str] = []
+    if not left_rows:
+        left_rows = county_scope_rows(use_status=False)
+        if status:
+            notes.append(f"左側縣市流向找不到「{status}」狀態資料，已改用該作物全部履歷狀態。")
+
+    if selected_county := (county or "").strip():
+        selected_row = next((row for row in left_rows if row["county"] == selected_county), None)
+        remaining = [row for row in left_rows if row["county"] != selected_county]
+        if selected_row:
+            left_rows = [selected_row, *remaining[: max(county_limit - 1, 0)]]
+        else:
+            left_rows = left_rows[:county_limit]
+    else:
+        left_rows = left_rows[:county_limit]
+
+    right_rows = status_scope_rows(use_county=True)
+    if not right_rows:
+        right_rows = status_scope_rows(use_county=False)
+        if county:
+            notes.append(f"右側狀態流向找不到「{county}」縣市資料，已改用全國該作物狀態結構。")
+
+    crop_node = f"作物：{crop}"
+    nodes: list[dict] = [{"name": crop_node, "node_type": "crop", "selected": True}]
+    links: list[dict] = []
+
+    for row in left_rows:
+        node_name = f"縣市：{row['county']}"
+        nodes.append(
+            {
+                "name": node_name,
+                "node_type": "county",
+                "selected": row["county"] == county,
+            }
+        )
+        links.append(
+            {
+                "source": node_name,
+                "target": crop_node,
+                "value": row["trace_count"],
+                "flow_type": "county_to_crop",
+                "label": row["county"],
+            }
+        )
+
+    for row in right_rows:
+        node_name = f"狀態：{row['status']}"
+        nodes.append(
+            {
+                "name": node_name,
+                "node_type": "status",
+                "selected": row["status"] == status,
+            }
+        )
+        links.append(
+            {
+                "source": crop_node,
+                "target": node_name,
+                "value": row["trace_count"],
+                "flow_type": "crop_to_status",
+                "label": row["status"],
+            }
+        )
+
+    dedup_nodes: list[dict] = []
+    seen = set()
+    for node in nodes:
+        if node["name"] in seen:
+            continue
+        seen.add(node["name"])
+        dedup_nodes.append(node)
+
+    return {
+        "nodes": dedup_nodes,
+        "links": links,
+        "notes": notes,
+        "county_rows": left_rows,
+        "status_rows": right_rows,
+    }
+
+
 def get_moa_rotation_alerts(limit: int = 10) -> list[dict]:
     rows = get_crop_matrix_rows("", 80)
     if not rows:

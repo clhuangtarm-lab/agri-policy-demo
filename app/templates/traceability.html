@@ -44,6 +44,7 @@
       <strong>方法註記</strong>
       <span>履歷樣本清單會依目前縣市、作物與履歷狀態即時向後端查詢，不再只看預載樣本。</span>
       <span>主題二模組使用產銷履歷說明欄位做關鍵詞探勘，統計單位為 distinct TraceCode。</span>
+      <span>Sankey 流向圖左側呈現所選狀態下的跨縣市分布，右側呈現所選縣市內該作物的狀態結構，避免圖形退化成單一路徑。</span>
     </div>
   </div>
 </section>
@@ -151,7 +152,20 @@
   </div>
 </section>
 
-<section class="grid-two">
+<section class="grid-main">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">履歷流向 Sankey</div>
+        <div class="panel-meta">左側看所選狀態在各縣市的履歷碼分布，右側看所選縣市內該作物的狀態結構。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="traceability-flow-chart" class="chart chart-large"></div>
+      <div class="inline-meta" id="traceability-flow-summary"></div>
+    </div>
+  </article>
+
   <article class="panel">
     <div class="panel-head">
       <div>
@@ -163,29 +177,29 @@
       <div id="traceability-status-chart" class="chart chart-medium"></div>
     </div>
   </article>
+</section>
 
-  <article class="panel">
-    <div class="panel-head">
-      <div>
-        <div class="panel-title">履歷樣本清單</div>
-        <div class="panel-meta">呈現篩選後的履歷樣本，可直接掃描履歷碼、生產者與產品。</div>
-      </div>
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">履歷樣本清單</div>
+      <div class="panel-meta">呈現篩選後的履歷樣本，可直接掃描履歷碼、生產者與產品。</div>
     </div>
-    <div class="panel-body panel-body-tight">
-      <table class="data-table compact">
-        <thead>
-          <tr>
-            <th>履歷碼</th>
-            <th>生產者</th>
-            <th>產品</th>
-            <th>縣市</th>
-            <th>狀態</th>
-          </tr>
-        </thead>
-        <tbody id="traceability-record-body"></tbody>
-      </table>
-    </div>
-  </article>
+  </div>
+  <div class="panel-body panel-body-tight">
+    <table class="data-table compact">
+      <thead>
+        <tr>
+          <th>履歷碼</th>
+          <th>生產者</th>
+          <th>產品</th>
+          <th>縣市</th>
+          <th>狀態</th>
+        </tr>
+      </thead>
+      <tbody id="traceability-record-body"></tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}
 
@@ -197,6 +211,7 @@
   const inspectionRows = {{ traceability.inspections | tojson }};
   const countyCropRows = {{ traceability.county_crop_rows | tojson }};
   const initialPracticeProfile = {{ traceability.practice_profile | tojson }};
+  const initialFlowProfile = {{ traceability.flow_profile | tojson }};
   const state = {
     county: {{ traceability.selected_county | tojson }},
     crop: {{ traceability.selected_crop | tojson }},
@@ -211,6 +226,7 @@
   const statusChart = echarts.init(document.getElementById("traceability-status-chart"));
   const cultivationChart = echarts.init(document.getElementById("traceability-cultivation-chart"));
   const fertilizerChart = echarts.init(document.getElementById("traceability-fertilizer-chart"));
+  const flowChart = echarts.init(document.getElementById("traceability-flow-chart"));
 
   function formatNumber(value, digits = 1) {
     return Number(value || 0).toLocaleString("zh-TW", {
@@ -259,6 +275,16 @@
       status: state.status,
     });
     return fetch(`/traceability/api/practices?${params.toString()}`)
+      .then((response) => response.json());
+  }
+
+  function getFlowProfile() {
+    const params = new URLSearchParams({
+      county: state.county,
+      crop: state.crop,
+      status: state.status,
+    });
+    return fetch(`/traceability/api/flow?${params.toString()}`)
       .then((response) => response.json());
   }
 
@@ -317,6 +343,76 @@
       `共 ${formatInt(practiceProfile.description_count)} 筆有說明資料的履歷樣本，其中 ${formatInt(practiceProfile.tagged_count)} 筆可辨識出栽培或肥培關鍵詞。`;
   }
 
+  function flowNodeLabel(name) {
+    return String(name || "").replace(/^縣市：|^作物：|^狀態：/, "");
+  }
+
+  function flowNodeColor(node) {
+    if (node.node_type === "county") {
+      return node.selected ? "#b74e3a" : "#8ca84f";
+    }
+    if (node.node_type === "crop") {
+      return "#2d5a3d";
+    }
+    return node.selected ? "#c88544" : "#4a7a8c";
+  }
+
+  function renderFlowChart(flowProfile) {
+    const summaryEl = document.getElementById("traceability-flow-summary");
+    if (!flowProfile || !flowProfile.nodes || !flowProfile.nodes.length || !flowProfile.links || !flowProfile.links.length) {
+      flowChart.clear();
+      summaryEl.textContent = "目前查無可用的履歷流向資料，請改選其他縣市、作物或狀態。";
+      return;
+    }
+
+    const notes = flowProfile.notes || [];
+    summaryEl.textContent = notes.length
+      ? notes.join(" ")
+      : `左側顯示「${state.status}」狀態下 ${state.crop} 的主要縣市流量；右側顯示 ${state.county} 內 ${state.crop} 的履歷狀態分布。`;
+
+    flowChart.setOption({
+      tooltip: {
+        trigger: "item",
+        formatter(params) {
+          if (params.dataType === "edge") {
+            return `${flowNodeLabel(params.data.source)} → ${flowNodeLabel(params.data.target)}<br/>履歷碼：${formatInt(params.data.value)}`;
+          }
+          return `${flowNodeLabel(params.data.name)}<br/>節點類型：${params.data.node_type}`;
+        },
+      },
+      series: [{
+        type: "sankey",
+        left: 16,
+        right: 20,
+        top: 20,
+        bottom: 24,
+        nodeGap: 14,
+        draggable: false,
+        emphasis: { focus: "adjacency" },
+        lineStyle: {
+          color: "gradient",
+          curveness: 0.46,
+          opacity: 0.35,
+        },
+        label: {
+          color: "#3c4a34",
+          formatter: (params) => flowNodeLabel(params.data.name),
+        },
+        data: flowProfile.nodes.map((node) => ({
+          ...node,
+          itemStyle: { color: flowNodeColor(node), borderColor: "#f6f1e8", borderWidth: node.selected ? 2 : 1 },
+        })),
+        links: flowProfile.links.map((link) => ({
+          ...link,
+          lineStyle: {
+            color: link.flow_type === "county_to_crop" ? "source" : "target",
+            opacity: 0.42,
+          },
+        })),
+      }],
+    });
+  }
+
   function syncUrl() {
     const params = new URLSearchParams({
       county: state.county,
@@ -331,7 +427,11 @@
     const selectedStatus = statusRows.find((row) => row.label === state.status);
     const statusTotal = Number(selectedStatus ? selectedStatus.count : 0);
     const passRate = resolvePassRate(state.crop);
-    const [records, practiceProfile] = await Promise.all([getFilteredRecords(), getPracticeProfile()]);
+    const [records, practiceProfile, flowProfile] = await Promise.all([
+      getFilteredRecords(),
+      getPracticeProfile(),
+      getFlowProfile(),
+    ]);
     const activeCount = state.status === "通過"
       ? selectedRow.producer_count
       : Math.round(selectedRow.producer_count * (statusTotal / Math.max(summary.producer_count || 1, 1)));
@@ -433,6 +533,7 @@
     });
 
     renderPracticeCharts(practiceProfile || initialPracticeProfile);
+    renderFlowChart(flowProfile || initialFlowProfile);
     syncUrl();
   }
 
@@ -454,9 +555,11 @@
     statusChart.resize();
     cultivationChart.resize();
     fertilizerChart.resize();
+    flowChart.resize();
   });
 
   renderPracticeCharts(initialPracticeProfile);
+  renderFlowChart(initialFlowProfile);
   render();
 </script>
 {% endblock %}

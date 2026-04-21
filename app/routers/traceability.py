@@ -38,6 +38,11 @@ async def traceability_page(
         crop=selected_crop,
         status=selected_status,
     )
+    flow_profile = queries.get_traceability_flow(
+        county=selected_county,
+        crop=selected_crop,
+        status=selected_status,
+    )
 
     traceability = {
         "summary": summary,
@@ -47,6 +52,7 @@ async def traceability_page(
         "inspections": inspection_rows,
         "county_crop_rows": county_crop_rows,
         "practice_profile": practice_profile,
+        "flow_profile": flow_profile,
         "selected_county": selected_county,
         "selected_crop": selected_crop,
         "selected_status": selected_status,
@@ -88,6 +94,20 @@ async def traceability_practices_api(
     status: str | None = None,
 ):
     profile = queries.get_traceability_practice_profile(
+        county=county,
+        crop=crop,
+        status=status,
+    )
+    return profile
+
+
+@router.get("/traceability/api/flow", response_class=JSONResponse)
+async def traceability_flow_api(
+    county: str | None = None,
+    crop: str | None = None,
+    status: str | None = None,
+):
+    profile = queries.get_traceability_flow(
         county=county,
         crop=crop,
         status=status,
