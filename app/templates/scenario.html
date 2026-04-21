@@ -232,6 +232,61 @@
   </div>
 </section>
 
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">風險門檻切換器</div>
+        <div class="panel-meta">提高門檻時，優先名單會同步縮小，可直接展示不同政策標準下的執行差異。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <form class="filter-bar scenario-threshold-toolbar" onsubmit="return false;">
+        <div class="range-group scenario-threshold-group">
+          <label class="filter-label" for="scenario-threshold">優先巡查門檻</label>
+          <input class="scenario-range" id="scenario-threshold" type="range" min="40" max="140" step="10" value="60" />
+          <div class="range-readout mono" id="scenario-threshold-value">60</div>
+        </div>
+      </form>
+
+      <div class="method-note scenario-threshold-note">
+        <strong>門檻定義</strong>
+        <span>高於門檻值的鄉鎮列為「立即巡查」，介於門檻 72% 至 100% 的鄉鎮列為「優先輔導」。</span>
+      </div>
+
+      <div class="scenario-threshold-stats">
+        <article class="comparison-card">
+          <div class="comparison-card-title">立即巡查</div>
+          <div class="threshold-stat-value mono" id="scenario-threshold-high">0</div>
+          <div class="inline-meta">高於目前門檻的鄉鎮數</div>
+        </article>
+        <article class="comparison-card">
+          <div class="comparison-card-title">優先輔導</div>
+          <div class="threshold-stat-value mono" id="scenario-threshold-medium">0</div>
+          <div class="inline-meta">接近門檻、可先安排輔導</div>
+        </article>
+        <article class="comparison-card comparison-card-note">
+          <div class="comparison-card-title">名單變化</div>
+          <div class="comparison-note-list" id="scenario-threshold-summary"></div>
+        </article>
+      </div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">縣市 / 作物雷達圖</div>
+        <div class="panel-meta">用基線結構快速比較所選縣市與作物的綜合輪廓，不受情境假設干擾。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="scenario-radar-chart" class="chart chart-medium"></div>
+      <div class="figure-caption"><strong>解讀：</strong>若縣市多邊形在「暴露壓力、空間擴散」較突出，代表治理應優先從場域部署切入；若作物多邊形在「覆蓋整備、輪替韌性」較弱，則較適合從資材與 MOA 管理著手。</div>
+    </div>
+  </article>
+</section>
+
 <section class="panel">
   <div class="panel-head">
     <div>
@@ -275,6 +330,7 @@
     intensity: {{ scenario.selected_intensity | tojson }},
     compareBy: "county",
     compareTarget: "",
+    riskThreshold: 60,
   };
 
   const initialParams = new URLSearchParams(window.location.search);
@@ -284,6 +340,9 @@
   if (initialParams.get("compare_target")) {
     state.compareTarget = initialParams.get("compare_target");
   }
+  if (initialParams.get("threshold")) {
+    state.riskThreshold = Number(initialParams.get("threshold")) || 60;
+  }
 
   const countyInput = document.getElementById("scenario-county");
   const cropInput = document.getElementById("scenario-crop");
@@ -292,11 +351,14 @@
   const intensityValue = document.getElementById("scenario-intensity-value");
   const compareDimensionInput = document.getElementById("scenario-compare-dimension");
   const compareTargetInput = document.getElementById("scenario-compare-target");
+  const thresholdInput = document.getElementById("scenario-threshold");
+  const thresholdValue = document.getElementById("scenario-threshold-value");
 
   const exposureChart = echarts.init(document.getElementById("scenario-exposure-chart"));
   const iracChart = echarts.init(document.getElementById("scenario-irac-chart"));
   const scorecardChart = echarts.init(document.getElementById("scenario-scorecard-chart"));
   const compareChart = echarts.init(document.getElementById("scenario-compare-chart"));
+  const radarChart = echarts.init(document.getElementById("scenario-radar-chart"));
 
   function formatNumber(value, digits = 1) {
     return Number(value || 0).toLocaleString("zh-TW", {
@@ -351,6 +413,10 @@
       .sort((a, b) => (b.exposure || 0) - (a.exposure || 0));
   }
 
+  function sumBy(rows, key) {
+    return rows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
+  }
+
   function getSelectedCountyCropRow(county, crop) {
     return countyCropRows.find((row) => row.county === county && row.crop === crop) || {
       county,
@@ -397,7 +463,7 @@
     }));
   }
 
-  function getTownshipPriorities(county, crop, strategy, intensity) {
+  function getTownshipPriorityRows(county, crop, strategy, intensity, threshold) {
     const effectRatio = getEffectRatio(strategy, intensity);
     return townshipRows
       .filter((row) => row.county === county)
@@ -406,16 +472,15 @@
         const weight = cropMatch ? 1.2 : 0.72;
         const weightedExposure = Number((row.exposure * weight * (1 - effectRatio * (cropMatch ? 0.9 : 0.45))).toFixed(1));
         let action = "持續追蹤";
-        if (weightedExposure >= 120) action = "立即巡查";
-        else if (weightedExposure >= 60) action = "優先輔導";
+        if (weightedExposure >= threshold) action = "立即巡查";
+        else if (weightedExposure >= threshold * 0.72) action = "優先輔導";
         return {
           ...row,
           weightedExposure,
           action,
         };
       })
-      .sort((a, b) => b.weightedExposure - a.weightedExposure)
-      .slice(0, 8);
+      .sort((a, b) => b.weightedExposure - a.weightedExposure);
   }
 
   function getScenarioScorecard(cropRow, selectedCountyCrop, scenarioExposure, coverageIndex, baselineCoverage, resilience, baselineResilience) {
@@ -502,6 +567,88 @@
         spread: clamp((Number(selectedCountyCrop.town_count || 0) / townMax) * 100, 0, 100),
       },
     };
+  }
+
+  function getCountyRadarMetrics(county) {
+    const rows = getCropRowsForCounty(county);
+    const countyExposureMax = Math.max(...counties.map((row) => Number(row.exposure || 0)), 1);
+    const countyAreaMax = Math.max(...counties.map((row) => sumBy(getCropRowsForCounty(row.county), "area_ha")), 1);
+    const countyTownMax = Math.max(...counties.map((row) => sumBy(getCropRowsForCounty(row.county), "town_count")), 1);
+    const exposureWeight = sumBy(rows, "exposure") || 1;
+    const avgCoverage = rows.length
+      ? rows.reduce((sum, row) => sum + getCoverageIndex(cropLookup[row.crop] || {}, { coverage_bonus: 0 }, 0) * Number(row.exposure || 0), 0) / exposureWeight
+      : 0;
+    const avgResilience = rows.length
+      ? rows.reduce((sum, row) => sum + Number((cropLookup[row.crop] || {}).irac_diversity || 0) * Number(row.exposure || 0), 0) / exposureWeight
+      : 0;
+    const resilienceMax = Math.max(...crops.map((row) => Number(row.irac_diversity || 0)), 1);
+
+    return [
+      clamp((Number((countyLookup[county] || {}).exposure || 0) / countyExposureMax) * 100, 0, 100),
+      clamp((sumBy(rows, "area_ha") / countyAreaMax) * 100, 0, 100),
+      clamp((sumBy(rows, "town_count") / countyTownMax) * 100, 0, 100),
+      clamp(avgCoverage, 0, 100),
+      clamp((avgResilience / resilienceMax) * 100, 0, 100),
+    ];
+  }
+
+  function getCropRadarMetrics(crop) {
+    const rows = getCountyCropRows(crop);
+    const cropAreaMax = Math.max(...crops.map((row) => sumBy(getCountyCropRows(row.crop), "area_ha")), 1);
+    const cropTownMax = Math.max(...crops.map((row) => sumBy(getCountyCropRows(row.crop), "town_count")), 1);
+    const cropExposureMax = Math.max(...crops.map((row) => Number(row.exposure || 0)), 1);
+    const resilienceMax = Math.max(...crops.map((row) => Number(row.irac_diversity || 0)), 1);
+    const cropRow = cropLookup[crop] || {};
+
+    return [
+      clamp((Number(cropRow.exposure || 0) / cropExposureMax) * 100, 0, 100),
+      clamp((sumBy(rows, "area_ha") / cropAreaMax) * 100, 0, 100),
+      clamp((sumBy(rows, "town_count") / cropTownMax) * 100, 0, 100),
+      clamp(getCoverageIndex(cropRow, { coverage_bonus: 0 }, 0), 0, 100),
+      clamp((Number(cropRow.irac_diversity || 0) / resilienceMax) * 100, 0, 100),
+    ];
+  }
+
+  function renderRadarModule() {
+    radarChart.setOption({
+      tooltip: { trigger: "item" },
+      legend: { top: 0, data: [state.county, state.crop] },
+      radar: {
+        radius: "62%",
+        indicator: [
+          { name: "暴露壓力", max: 100 },
+          { name: "規模量體", max: 100 },
+          { name: "空間擴散", max: 100 },
+          { name: "覆蓋整備", max: 100 },
+          { name: "輪替韌性", max: 100 },
+        ],
+        splitNumber: 4,
+        axisName: { color: "#3a3f35", fontSize: 11 },
+        splitLine: { lineStyle: { color: ["#d9d7c5"] } },
+        splitArea: { areaStyle: { color: ["rgba(255,255,255,0.6)", "rgba(239,238,230,0.45)"] } },
+      },
+      series: [
+        {
+          type: "radar",
+          data: [
+            {
+              name: state.county,
+              value: getCountyRadarMetrics(state.county),
+              areaStyle: { color: "rgba(45, 90, 61, 0.18)" },
+              lineStyle: { color: "#2d5a3d", width: 2 },
+              itemStyle: { color: "#2d5a3d" },
+            },
+            {
+              name: state.crop,
+              value: getCropRadarMetrics(state.crop),
+              areaStyle: { color: "rgba(74, 122, 140, 0.16)" },
+              lineStyle: { color: "#4a7a8c", width: 2 },
+              itemStyle: { color: "#4a7a8c" },
+            },
+          ],
+        },
+      ],
+    });
   }
 
   function getRecommendations(countyRow, cropRow, selectedCountyCrop, strategy, intensity, priorityRows, coverageIndex, resilience) {
@@ -757,6 +904,7 @@
       strategy: state.strategy,
       intensity: String(state.intensity),
       compare_by: state.compareBy,
+      threshold: String(state.riskThreshold),
     });
     if (state.compareTarget) {
       params.set("compare_target", state.compareTarget);
@@ -775,7 +923,10 @@
     const coverageIndex = getCoverageIndex(cropRow, strategy, state.intensity);
     const baselineResilience = Number(cropRow.irac_diversity || 0);
     const resilience = getIracResilience(cropRow, strategy, state.intensity);
-    const priorityRows = getTownshipPriorities(state.county, state.crop, strategy, state.intensity);
+    const allTownshipRows = getTownshipPriorityRows(state.county, state.crop, strategy, state.intensity, state.riskThreshold);
+    const priorityRows = allTownshipRows.filter((row) => row.weightedExposure >= state.riskThreshold * 0.72).slice(0, 8);
+    const thresholdHigh = allTownshipRows.filter((row) => row.weightedExposure >= state.riskThreshold).length;
+    const thresholdMedium = allTownshipRows.filter((row) => row.weightedExposure >= state.riskThreshold * 0.72 && row.weightedExposure < state.riskThreshold).length;
     const exposureRows = getCountyCropRows(state.crop).slice(0, 8);
     const reductionPercent = selectedCountyCrop.exposure > 0
       ? (1 - (scenarioExposure / selectedCountyCrop.exposure)) * 100
@@ -792,6 +943,8 @@
     );
 
     intensityValue.textContent = state.intensity;
+    thresholdInput.value = state.riskThreshold;
+    thresholdValue.textContent = state.riskThreshold;
     document.getElementById("scenario-focus-chip").textContent = strategy.focus;
     document.getElementById("scenario-crop-chip").textContent = `作物 / ${state.crop}`;
     document.getElementById("scenario-county-chip").textContent = `縣市 / ${state.county}`;
@@ -807,6 +960,23 @@
     document.getElementById("scenario-crop-exposure").textContent = formatNumber(cropRow.exposure);
     document.getElementById("scenario-irac-resilience").textContent = formatNumber(resilience, 1);
     document.getElementById("scenario-registration-count").textContent = Number(cropRow.registration_count || 0).toLocaleString("zh-TW");
+    document.getElementById("scenario-threshold-high").textContent = thresholdHigh;
+    document.getElementById("scenario-threshold-medium").textContent = thresholdMedium;
+
+    const thresholdSummary = document.getElementById("scenario-threshold-summary");
+    thresholdSummary.innerHTML = "";
+    [
+      `目前門檻為 ${state.riskThreshold}，觀察名單會保留高於 ${Math.round(state.riskThreshold * 0.72)} 的鄉鎮。`,
+      `目前共有 ${thresholdHigh} 個鄉鎮達到立即巡查門檻，${thresholdMedium} 個鄉鎮落在優先輔導區間。`,
+      priorityRows.length
+        ? `目前榜首為 ${priorityRows[0].town}，加權暴露 ${formatNumber(priorityRows[0].weightedExposure)}。`
+        : "目前沒有鄉鎮進入優先名單，可降低門檻查看較寬鬆的政策情境。",
+    ].forEach((text) => {
+      const item = document.createElement("div");
+      item.className = "comparison-note-item";
+      item.textContent = text;
+      thresholdSummary.appendChild(item);
+    });
 
     const recommendationsContainer = document.getElementById("scenario-recommendations");
     recommendationsContainer.innerHTML = "";
@@ -822,16 +992,24 @@
 
     const townshipBody = document.getElementById("scenario-township-body");
     townshipBody.innerHTML = "";
-    priorityRows.forEach((row) => {
+    if (!priorityRows.length) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${row.town}</td>
-        <td><a href="/detail?crop=${encodeURIComponent(row.top_crop)}">${row.top_crop}</a></td>
-        <td class="num mono">${formatNumber(row.weightedExposure)}</td>
-        <td>${row.action}</td>
+        <td colspan="4" class="inline-meta">目前門檻下沒有鄉鎮進入優先名單，請降低門檻或切換策略查看。</td>
       `;
       townshipBody.appendChild(tr);
-    });
+    } else {
+      priorityRows.forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.town}</td>
+          <td><a href="/detail?crop=${encodeURIComponent(row.top_crop)}">${row.top_crop}</a></td>
+          <td class="num mono">${formatNumber(row.weightedExposure)}</td>
+          <td>${row.action}</td>
+        `;
+        townshipBody.appendChild(tr);
+      });
+    }
 
     if (!exposureRows.length) {
       renderEmptyState(exposureChart, "查無此作物的縣市情境資料");
@@ -954,6 +1132,7 @@
     }
 
     renderComparisonModule(strategy);
+    renderRadarModule();
     syncUrl();
   }
 
@@ -982,12 +1161,17 @@
     state.intensity = Number(event.target.value);
     render();
   });
+  thresholdInput.addEventListener("input", (event) => {
+    state.riskThreshold = Number(event.target.value);
+    render();
+  });
 
   window.addEventListener("resize", () => {
     exposureChart.resize();
     iracChart.resize();
     scorecardChart.resize();
     compareChart.resize();
+    radarChart.resize();
   });
 
   render();

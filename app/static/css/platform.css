@@ -611,6 +611,11 @@ a:hover {
   margin-bottom: 12px;
 }
 
+.scenario-threshold-toolbar {
+  align-items: end;
+  margin-bottom: 0;
+}
+
 .scenario-select {
   min-width: 180px;
 }
@@ -694,6 +699,27 @@ a:hover {
 .scenario-compare-table-wrap {
   margin-top: 12px;
   overflow-x: auto;
+}
+
+.scenario-threshold-group {
+  min-width: 100%;
+}
+
+.scenario-threshold-note {
+  margin-bottom: 12px;
+}
+
+.scenario-threshold-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.threshold-stat-value {
+  margin-top: 6px;
+  font-size: 28px;
+  line-height: 1.1;
+  color: var(--ink);
 }
 
 .range-group {
@@ -814,7 +840,8 @@ a:hover {
   .stat-grid,
   .split-summary,
   .scenario-compare-layout,
-  .comparison-card-metrics {
+  .comparison-card-metrics,
+  .scenario-threshold-stats {
     grid-template-columns: 1fr;
   }
 
