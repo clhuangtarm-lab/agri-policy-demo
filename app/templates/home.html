@@ -11,12 +11,30 @@
   {% endfor %}
 </section>
 
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">方法註記</div>
+      <div class="panel-meta">將展示型指標的計算方式直接放進介面，方便簡報與審查時說明口徑。</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="method-note">
+      <strong>方法口徑總覽</strong>
+      <span>縣市與作物暴露值沿用 ETL 分析表作為基線，用於相對排序與熱點辨識。</span>
+      <span>主題一的長短期作物樣態依 crop_taxonomy 類別規則分群：果樹類、特用作物類視為長週期；蔬菜類、雜糧類、稻米類視為短週期。</span>
+      <span>主題二的履歷栽培 / 肥培分析採說明欄位關鍵詞探勘，統計單位為 distinct TraceCode。</span>
+      <span>主題三的 MOA 輪替預警分數為展示型綜合指標，結合暴露、IRAC 多樣性、可用碼數與登記數做相對排序。</span>
+    </div>
+  </div>
+</section>
+
 <section class="grid-main">
   <article class="panel">
     <div class="panel-head">
       <div>
         <div class="panel-title">高風險作物排序</div>
-        <div class="panel-meta">主題二 / 以加權暴露排序的優先處理名單</div>
+        <div class="panel-meta">依作物面積、暴露值與高風險比例，挑出需要優先關注的作物。</div>
       </div>
     </div>
     <div class="panel-body panel-body-tight">
@@ -26,8 +44,8 @@
             <th>#</th>
             <th>作物</th>
             <th class="num">面積</th>
-            <th class="num">高風險占比</th>
-            <th class="num">暴露</th>
+            <th class="num">高風險比例</th>
+            <th class="num">暴露值</th>
             <th class="num">登記數</th>
           </tr>
         </thead>
@@ -50,8 +68,8 @@
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">關鍵觀察</div>
-        <div class="panel-meta">將三大主題邏輯收束成標案簡報可直接使用的重點句</div>
+        <div class="panel-title">核心發現</div>
+        <div class="panel-meta">把縣市風險、作物缺口與監測重點濃縮成可直接引用的敘事句。</div>
       </div>
     </div>
     <div class="panel-body findings-list">
@@ -69,8 +87,8 @@
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">縣市暴露排名</div>
-        <div class="panel-meta">主題一 / 聚焦場域與縣市治理優先順序</div>
+        <div class="panel-title">縣市暴露排行</div>
+        <div class="panel-meta">快速確認高暴露縣市，作為主題一空間定位的入口。</div>
       </div>
     </div>
     <div class="panel-body">
@@ -81,8 +99,8 @@
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">作物暴露前十名</div>
-        <div class="panel-meta">主題二 / Drill-down 至作物深度頁</div>
+        <div class="panel-title">作物暴露排行</div>
+        <div class="panel-meta">與作物深度頁串接，利於快速 drill-down。</div>
       </div>
     </div>
     <div class="panel-body">
@@ -91,11 +109,56 @@
   </article>
 </section>
 
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">主題一 / 長短期作物樣態</div>
+        <div class="panel-meta">以縣市耕作面積為底，示範長週期與短週期作物的空間分布差異。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="cycle-pattern-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">縣市種植樣態摘要</div>
+        <div class="panel-meta">可快速說明哪些縣市偏向長期作物、哪些縣市以短期作物為主。</div>
+      </div>
+    </div>
+    <div class="panel-body panel-body-tight">
+      <table class="data-table compact">
+        <thead>
+          <tr>
+            <th>縣市</th>
+            <th class="num">長週期占比</th>
+            <th class="num">短週期占比</th>
+            <th>主要樣態</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in overview.cycle_analysis.counties %}
+            <tr>
+              <td>{{ row.county }}</td>
+              <td class="num mono">{{ "{:.1%}".format(row.long_share) }}</td>
+              <td class="num mono">{{ "{:.1%}".format(row.short_share) }}</td>
+              <td>{{ row.dominant_pattern }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
 <section class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">縣市摘要</div>
-      <div class="panel-meta">點擊縣市可進入地圖頁並延續 drill-down</div>
+      <div class="panel-title">縣市總覽表</div>
+      <div class="panel-meta">可銜接縣市風險地圖頁，作為區域 drill-down 入口。</div>
     </div>
   </div>
   <div class="panel-body panel-body-tight">
@@ -104,9 +167,9 @@
         <tr>
           <th>#</th>
           <th>縣市</th>
-          <th class="num">總面積</th>
-          <th class="num">暴露</th>
-          <th>前三高風險作物</th>
+          <th class="num">耕作面積</th>
+          <th class="num">暴露值</th>
+          <th>主要高風險作物</th>
         </tr>
       </thead>
       <tbody>
@@ -129,6 +192,7 @@
 <script>
   const countyRisk = {{ overview.county_risk | tojson }};
   const cropRisk = {{ overview.risk_crops | tojson }};
+  const cycleAnalysis = {{ overview.cycle_analysis | tojson }};
 
   function makeBarChart(el, data, nameKey, valueKey, color) {
     const chart = echarts.init(document.getElementById(el));
@@ -157,5 +221,37 @@
 
   makeBarChart("county-exposure-chart", countyRisk.slice(0, 8), "county", "exposure", "#2d5a3d");
   makeBarChart("crop-exposure-chart", cropRisk.slice(0, 8), "crop", "exposure", "#b74e3a");
+
+  const cycleChart = echarts.init(document.getElementById("cycle-pattern-chart"));
+  cycleChart.setOption({
+    grid: { left: 78, right: 18, top: 12, bottom: 24 },
+    legend: { top: 0 },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+    yAxis: {
+      type: "category",
+      data: cycleAnalysis.counties.map((row) => row.county).reverse(),
+      axisTick: { show: false },
+    },
+    series: [
+      {
+        name: "長週期",
+        type: "bar",
+        stack: "total",
+        data: cycleAnalysis.counties.map((row) => row.long_area).reverse(),
+        itemStyle: { color: "#2d5a3d" },
+        barMaxWidth: 18,
+      },
+      {
+        name: "短週期",
+        type: "bar",
+        stack: "total",
+        data: cycleAnalysis.counties.map((row) => row.short_area).reverse(),
+        itemStyle: { color: "#c8a951", borderRadius: [0, 3, 3, 0] },
+        barMaxWidth: 18,
+      },
+    ],
+  });
+  window.addEventListener("resize", () => cycleChart.resize());
 </script>
 {% endblock %}

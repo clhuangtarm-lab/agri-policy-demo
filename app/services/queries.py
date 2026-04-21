@@ -811,3 +811,225 @@ def get_traceability_filtered_records(
         """,
         tuple(params),
     )
+
+
+def get_crop_cycle_analysis(limit: int = 8) -> dict:
+    tax_rows = fetchall(
+        """
+        SELECT crop_root,
+               MIN(cat_lv1) AS cat_lv1,
+               MIN(cat_lv2) AS cat_lv2
+        FROM crop_taxonomy
+        WHERE TRIM(COALESCE(crop_root, '')) <> ''
+        GROUP BY crop_root
+        """
+    )
+    taxonomy = {
+        row["crop_root"]: {"cat_lv1": row["cat_lv1"] or "", "cat_lv2": row["cat_lv2"] or ""}
+        for row in tax_rows
+    }
+    area_rows = fetchall(
+        """
+        SELECT county,
+               crop,
+               ROUND(SUM(area_ha), 1) AS area_ha
+        FROM crop_area
+        GROUP BY county, crop
+        ORDER BY county ASC, area_ha DESC
+        """
+    )
+
+    short_lv1 = {"蔬菜類", "雜糧類", "稻米類"}
+    long_lv1 = {"果樹類", "特用作物類"}
+    short_lv2 = {"葉菜類", "果菜類", "瓜菜類", "根菜類", "鱗莖類", "花菜類", "豆菜類", "菇蕈類", "莖菜類", "穀類"}
+    long_lv2 = {"多年生草本類", "木本花卉類", "蘭花類"}
+
+    county_summary: dict[str, dict] = {}
+    totals = {"long_area": 0.0, "short_area": 0.0, "mixed_area": 0.0}
+
+    for row in area_rows:
+        county = row["county"]
+        crop = row["crop"]
+        area = float(row["area_ha"] or 0)
+        tax = taxonomy.get(crop, {})
+        cat_lv1 = tax.get("cat_lv1", "")
+        cat_lv2 = tax.get("cat_lv2", "")
+        cycle = "mixed"
+        if cat_lv1 in long_lv1 or cat_lv2 in long_lv2:
+            cycle = "long"
+        elif cat_lv1 in short_lv1 or cat_lv2 in short_lv2:
+            cycle = "short"
+
+        county_row = county_summary.setdefault(
+            county,
+            {
+                "county": county,
+                "long_area": 0.0,
+                "short_area": 0.0,
+                "mixed_area": 0.0,
+                "top_long_crop": "",
+                "top_long_area": 0.0,
+                "top_short_crop": "",
+                "top_short_area": 0.0,
+            },
+        )
+        key = f"{cycle}_area"
+        county_row[key] += area
+        totals[key] += area
+
+        if cycle == "long" and area > county_row["top_long_area"]:
+            county_row["top_long_crop"] = crop
+            county_row["top_long_area"] = area
+        if cycle == "short" and area > county_row["top_short_area"]:
+            county_row["top_short_crop"] = crop
+            county_row["top_short_area"] = area
+
+    counties = []
+    for row in county_summary.values():
+        total_area = row["long_area"] + row["short_area"] + row["mixed_area"]
+        row["total_area"] = round(total_area, 1)
+        row["long_area"] = round(row["long_area"], 1)
+        row["short_area"] = round(row["short_area"], 1)
+        row["mixed_area"] = round(row["mixed_area"], 1)
+        row["long_share"] = round(row["long_area"] / total_area, 4) if total_area else 0
+        row["short_share"] = round(row["short_area"] / total_area, 4) if total_area else 0
+        row["dominant_pattern"] = (
+            "長期作物主導" if row["long_area"] >= row["short_area"] else "短期作物主導"
+        )
+        counties.append(row)
+
+    counties.sort(key=lambda item: item["total_area"], reverse=True)
+    total_area = totals["long_area"] + totals["short_area"] + totals["mixed_area"]
+    return {
+        "counties": counties[:limit],
+        "totals": {
+            "long_area": round(totals["long_area"], 1),
+            "short_area": round(totals["short_area"], 1),
+            "mixed_area": round(totals["mixed_area"], 1),
+            "long_share": round(totals["long_area"] / total_area, 4) if total_area else 0,
+            "short_share": round(totals["short_area"] / total_area, 4) if total_area else 0,
+        },
+    }
+
+
+def get_traceability_practice_profile(
+    county: str | None = None,
+    crop: str | None = None,
+    status: str | None = None,
+) -> dict:
+    conditions = [
+        "TRIM(COALESCE(tp.Description, '')) <> ''",
+        "TRIM(COALESCE(pr.crop_root, '')) <> ''",
+    ]
+    params: list[object] = []
+
+    if county:
+        conditions.append("SUBSTR(tp.Address, 1, 3) = ?")
+        params.append(county)
+    if crop:
+        conditions.append("pr.crop_root = ?")
+        params.append(crop)
+    if status:
+        conditions.append("tp.Status = ?")
+        params.append(status)
+
+    rows = fetchall(
+        f"""
+        SELECT DISTINCT tp.TraceCode AS trace_code,
+               tp.Producer AS producer,
+               tp.Description AS description
+        FROM traceability_producer tp
+        JOIN traceability_product pr
+          ON pr.TraceCode = tp.TraceCode
+        WHERE {' AND '.join(conditions)}
+        """,
+        tuple(params),
+    )
+
+    cultivation_keywords = {
+        "友善 / 有機栽培": ["友善", "有機", "自然農法", "自然農業"],
+        "生態 / 草生管理": ["生態", "草生", "棲地", "自然"],
+        "安全用藥 / 減藥": ["安全用藥", "減藥", "無農藥", "低農藥"],
+        "病蟲害防治": ["病蟲害", "防治", "誘蟲", "生物防治"],
+    }
+    fertilizer_keywords = {
+        "有機肥 / 堆肥": ["有機肥", "堆肥", "腐熟"],
+        "肥培 / 施肥管理": ["肥料", "施肥", "追肥", "基肥"],
+        "液肥 / 微生物": ["液肥", "微生物", "菌肥"],
+    }
+
+    def score_keywords(keyword_map: dict[str, list[str]]) -> list[dict]:
+        output = []
+        for label, keywords in keyword_map.items():
+            count = sum(
+                1 for row in rows if any(keyword in (row["description"] or "") for keyword in keywords)
+            )
+            output.append({"label": label, "count": count})
+        output.sort(key=lambda item: item["count"], reverse=True)
+        return output
+
+    cultivation = score_keywords(cultivation_keywords)
+    fertilizer = score_keywords(fertilizer_keywords)
+    all_keywords = [
+        keyword
+        for keywords in list(cultivation_keywords.values()) + list(fertilizer_keywords.values())
+        for keyword in keywords
+    ]
+    tagged = sum(
+        1
+        for row in rows
+        if any(keyword in (row["description"] or "") for keyword in all_keywords)
+    )
+
+    return {
+        "description_count": len(rows),
+        "cultivation": cultivation,
+        "fertilizer": fertilizer,
+        "tagged_count": tagged,
+    }
+
+
+def get_moa_rotation_alerts(limit: int = 10) -> list[dict]:
+    rows = get_crop_matrix_rows("", 80)
+    if not rows:
+        return []
+
+    max_exposure = max(float(row["exposure"] or 0) for row in rows) or 1.0
+    max_registration = max(int(row["registration_count"] or 0) for row in rows) or 1
+    alerts = []
+
+    for row in rows:
+        exposure_norm = float(row["exposure"] or 0) / max_exposure
+        diversity = float(row["irac_diversity"] or 0)
+        diversity_gap = max(0.0, 1 - min(diversity, 5.0) / 5.0)
+        coverage_codes = int(row["coverage_irac_code_count"] or 0)
+        coverage_gap = max(0.0, 1 - min(coverage_codes, 8) / 8.0)
+        registration_gap = max(0.0, 1 - min(int(row["registration_count"] or 0), max_registration) / max_registration)
+
+        score = (exposure_norm * 0.45) + (diversity_gap * 0.3) + (coverage_gap * 0.15) + (registration_gap * 0.1)
+        score_100 = round(score * 100, 1)
+        if score_100 >= 70:
+            level = "高"
+            action = "優先規劃 MOA 輪替與替代資材盤點"
+        elif score_100 >= 50:
+            level = "中"
+            action = "追蹤 IRAC 分散度與縣市暴露變化"
+        else:
+            level = "低"
+            action = "維持監測，作為基線對照"
+
+        alerts.append(
+            {
+                "crop": row["crop"],
+                "exposure": round(float(row["exposure"] or 0), 1),
+                "registration_count": int(row["registration_count"] or 0),
+                "coverage_irac_code_count": coverage_codes,
+                "irac_diversity": round(diversity, 1),
+                "rotation_alert_score": score_100,
+                "alert_level": level,
+                "action": action,
+            }
+        )
+
+    alerts.sort(key=lambda item: item["rotation_alert_score"], reverse=True)
+    return alerts[:limit]

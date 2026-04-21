@@ -5,7 +5,7 @@
   <div class="panel-head">
     <div>
       <div class="panel-title">履歷篩選面板</div>
-      <div class="panel-meta">依縣市、作物與履歷狀態切換，觀察履歷覆蓋與檢驗輪廓。</div>
+      <div class="panel-meta">依縣市、作物與履歷狀態切換，觀察履歷覆蓋、檢驗結果與樣本清單。</div>
     </div>
     <div class="panel-meta">Traceability / producer-product-inspection linkage</div>
   </div>
@@ -39,6 +39,12 @@
       <span class="theme-chip" id="traceability-status-chip"></span>
       <span class="theme-chip">資料來源：API-19 / API-20 / API-23</span>
     </div>
+
+    <div class="method-note">
+      <strong>方法註記</strong>
+      <span>履歷樣本清單會依目前縣市、作物與履歷狀態即時向後端查詢，不再只看預載樣本。</span>
+      <span>主題二模組使用產銷履歷說明欄位做關鍵詞探勘，統計單位為 distinct TraceCode。</span>
+    </div>
   </div>
 </section>
 
@@ -51,7 +57,7 @@
   <article class="kpi-card tone-info">
     <div class="kpi-label">Trace Products</div>
     <div class="kpi-value mono" id="traceability-product-count">0</div>
-    <div class="kpi-meta">篩選後的履歷產品量</div>
+    <div class="kpi-meta">符合篩選條件的履歷產品量</div>
   </article>
   <article class="kpi-card">
     <div class="kpi-label">Trace Codes</div>
@@ -61,12 +67,39 @@
   <article class="kpi-card tone-warn">
     <div class="kpi-label">Inspection Pass</div>
     <div class="kpi-value mono" id="traceability-pass-rate">0%</div>
-    <div class="kpi-meta">相同作物的檢驗通過率</div>
+    <div class="kpi-meta">對應作物抽驗通過率</div>
   </article>
   <article class="kpi-card tone-info">
     <div class="kpi-label">Active Producers</div>
     <div class="kpi-value mono" id="traceability-active-count">0</div>
-    <div class="kpi-meta">履歷狀態為通過的估計數</div>
+    <div class="kpi-meta">符合所選狀態的估計生產者數</div>
+  </article>
+</section>
+
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">主題二 / 栽培防治關鍵詞</div>
+        <div class="panel-meta">從履歷說明欄位提取友善耕作、生態管理與病蟲害防治等文字訊號。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="traceability-cultivation-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">肥培管理關鍵詞</div>
+        <div class="panel-meta">示範用文字資料觀察有機肥、堆肥與施肥管理的提及程度。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="traceability-fertilizer-chart" class="chart chart-medium"></div>
+      <div class="inline-meta" id="traceability-practice-summary"></div>
+    </div>
   </article>
 </section>
 
@@ -75,7 +108,7 @@
     <div class="panel-head">
       <div>
         <div class="panel-title">縣市履歷覆蓋</div>
-        <div class="panel-meta">可快速對照所選作物在各縣市的履歷產品量與履歷碼數。</div>
+        <div class="panel-meta">比較所選作物在各縣市的履歷產品量與履歷碼分布。</div>
       </div>
       <a class="text-link" id="traceability-detail-link" href="/detail">查看作物深度頁</a>
     </div>
@@ -89,7 +122,7 @@
       <div class="panel-head">
         <div>
           <div class="panel-title">履歷觀察重點</div>
-          <div class="panel-meta">把履歷狀態、作物檢驗與區域分布串在一起，利於簡報敘事。</div>
+          <div class="panel-meta">把履歷狀態、作物檢驗與區域分布串在一起，方便做簡報敘事。</div>
         </div>
       </div>
       <div class="panel-body findings-list" id="traceability-findings"></div>
@@ -98,7 +131,7 @@
     <article class="panel">
       <div class="panel-head">
         <div>
-          <div class="panel-title">檢驗作物概況</div>
+          <div class="panel-title">抽驗作物概況</div>
           <div class="panel-meta">顯示主要履歷作物的抽驗量與通過率。</div>
         </div>
       </div>
@@ -135,7 +168,7 @@
     <div class="panel-head">
       <div>
         <div class="panel-title">履歷樣本清單</div>
-        <div class="panel-meta">呈現篩選後的履歷樣本，可直接掃描生產者、產品與地點。</div>
+        <div class="panel-meta">呈現篩選後的履歷樣本，可直接掃描履歷碼、生產者與產品。</div>
       </div>
     </div>
     <div class="panel-body panel-body-tight">
@@ -159,11 +192,11 @@
 {% block scripts %}
 <script>
   const summary = {{ traceability.summary | tojson }};
-  const countyRows = {{ traceability.counties | tojson }};
   const cropRows = {{ traceability.crops | tojson }};
   const statusRows = {{ traceability.statuses | tojson }};
   const inspectionRows = {{ traceability.inspections | tojson }};
   const countyCropRows = {{ traceability.county_crop_rows | tojson }};
+  const initialPracticeProfile = {{ traceability.practice_profile | tojson }};
   const state = {
     county: {{ traceability.selected_county | tojson }},
     crop: {{ traceability.selected_crop | tojson }},
@@ -176,6 +209,8 @@
 
   const countyChart = echarts.init(document.getElementById("traceability-county-chart"));
   const statusChart = echarts.init(document.getElementById("traceability-status-chart"));
+  const cultivationChart = echarts.init(document.getElementById("traceability-cultivation-chart"));
+  const fertilizerChart = echarts.init(document.getElementById("traceability-fertilizer-chart"));
 
   function formatNumber(value, digits = 1) {
     return Number(value || 0).toLocaleString("zh-TW", {
@@ -194,7 +229,6 @@
   }
 
   function getFilteredMatrix() {
-    const countyFiltered = countyCropRows.filter((row) => row.county === state.county);
     const cropFiltered = countyCropRows.filter((row) => row.crop === state.crop);
     const selectedRow = countyCropRows.find((row) => row.county === state.county && row.crop === state.crop) || {
       county: state.county,
@@ -203,7 +237,7 @@
       trace_count: 0,
       producer_count: 0,
     };
-    return { countyFiltered, cropFiltered, selectedRow };
+    return { cropFiltered, selectedRow };
   }
 
   function getFilteredRecords() {
@@ -218,6 +252,16 @@
       .then((payload) => payload.rows || []);
   }
 
+  function getPracticeProfile() {
+    const params = new URLSearchParams({
+      county: state.county,
+      crop: state.crop,
+      status: state.status,
+    });
+    return fetch(`/traceability/api/practices?${params.toString()}`)
+      .then((response) => response.json());
+  }
+
   function buildFindings(selectedRow, passRate, activeCount) {
     return [
       {
@@ -228,14 +272,49 @@
       {
         tone: "finding-mid",
         title: `履歷狀態 ${state.status}`,
-        body: `符合所選狀態的估計生產者約 ${formatInt(activeCount)} 人，可用於說明履歷池活躍程度與後續盤點優先序。`,
+        body: `符合所選狀態的估計生產者約 ${formatInt(activeCount)} 人，可用來說明履歷池活躍程度與盤點優先序。`,
       },
       {
         tone: "finding-mid",
         title: `${state.crop} 抽驗概況`,
-        body: `履歷檢驗通過率約 ${formatNumber(passRate, 1)}%，可與風險矩陣頁交叉說明監測與品質表現。`,
+        body: `對應作物的履歷抽驗通過率約 ${formatNumber(passRate, 1)}%，可與風險矩陣頁交叉說明。`,
       },
     ];
+  }
+
+  function renderPracticeCharts(practiceProfile) {
+    cultivationChart.setOption({
+      grid: { left: 88, right: 18, top: 12, bottom: 24 },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+      yAxis: {
+        type: "category",
+        data: practiceProfile.cultivation.map((row) => row.label).reverse(),
+        axisTick: { show: false },
+      },
+      series: [{
+        type: "bar",
+        data: practiceProfile.cultivation.map((row) => row.count).reverse(),
+        itemStyle: { color: "#4a7a8c", borderRadius: [0, 3, 3, 0] },
+        barMaxWidth: 16,
+      }],
+    });
+
+    fertilizerChart.setOption({
+      tooltip: { trigger: "item" },
+      legend: { bottom: 0 },
+      series: [{
+        type: "pie",
+        radius: ["36%", "68%"],
+        center: ["50%", "42%"],
+        data: practiceProfile.fertilizer.map((row) => ({ name: row.label, value: row.count })),
+        label: { formatter: "{b}\n{c}" },
+        color: ["#2d5a3d", "#8ca84f", "#c8a951", "#b74e3a"],
+      }],
+    });
+
+    document.getElementById("traceability-practice-summary").textContent =
+      `共 ${formatInt(practiceProfile.description_count)} 筆有說明資料的履歷樣本，其中 ${formatInt(practiceProfile.tagged_count)} 筆可辨識出栽培或肥培關鍵詞。`;
   }
 
   function syncUrl() {
@@ -248,11 +327,11 @@
   }
 
   async function render() {
-    const { countyFiltered, cropFiltered, selectedRow } = getFilteredMatrix();
+    const { cropFiltered, selectedRow } = getFilteredMatrix();
     const selectedStatus = statusRows.find((row) => row.label === state.status);
     const statusTotal = Number(selectedStatus ? selectedStatus.count : 0);
     const passRate = resolvePassRate(state.crop);
-    const records = await getFilteredRecords();
+    const [records, practiceProfile] = await Promise.all([getFilteredRecords(), getPracticeProfile()]);
     const activeCount = state.status === "通過"
       ? selectedRow.producer_count
       : Math.round(selectedRow.producer_count * (statusTotal / Math.max(summary.producer_count || 1, 1)));
@@ -353,6 +432,7 @@
       }],
     });
 
+    renderPracticeCharts(practiceProfile || initialPracticeProfile);
     syncUrl();
   }
 
@@ -372,8 +452,11 @@
   window.addEventListener("resize", () => {
     countyChart.resize();
     statusChart.resize();
+    cultivationChart.resize();
+    fertilizerChart.resize();
   });
 
+  renderPracticeCharts(initialPracticeProfile);
   render();
 </script>
 {% endblock %}

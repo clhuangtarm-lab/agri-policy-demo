@@ -11,12 +11,28 @@
   {% endfor %}
 </section>
 
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">方法註記</div>
+      <div class="panel-meta">將主題三的輪替預警、分布與撤銷狀態口徑直接寫在介面上。</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="method-note">
+      <strong>MOA 輪替預警</strong>
+      <span>輪替預警分數 = 暴露值相對排序 + IRAC 多樣性反向缺口 + 可用 IRAC 碼缺口 + 登記數缺口。</span>
+      <span>該分數為展示型相對指標，用來排序輪替優先序，不代表實驗測得抗藥性強度。</span>
+    </div>
+  </div>
+</section>
+
 <section class="grid-two">
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">IRAC 代碼分布</div>
-        <div class="panel-meta">主題三 / 依實際標註資料統計抗性機制分布</div>
+        <div class="panel-title">IRAC 分布</div>
+        <div class="panel-meta">以 IRAC 標記資料觀察作用機制的主力分布。</div>
       </div>
     </div>
     <div class="panel-body">
@@ -28,7 +44,7 @@
     <div class="panel-head">
       <div>
         <div class="panel-title">劑型分布</div>
-        <div class="panel-meta">以 formCode 盤點主要劑型，支援政策監測與說明</div>
+        <div class="panel-meta">依 formCode 查看常見劑型結構。</div>
       </div>
     </div>
     <div class="panel-body">
@@ -41,15 +57,62 @@
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">製造商來源前十名</div>
-        <div class="panel-meta">可作為供應來源與進口依賴的輔助資訊</div>
+        <div class="panel-title">主題三 / MOA 輪替預警</div>
+        <div class="panel-meta">依暴露、IRAC 多樣性與可用碼缺口，排序需優先規劃輪替的作物。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="rotation-alert-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">輪替預警清單</div>
+        <div class="panel-meta">可直接作為補助與監測優先序的 demo 名單。</div>
       </div>
     </div>
     <div class="panel-body panel-body-tight">
       <table class="data-table compact">
         <thead>
           <tr>
-            <th>製造商 / 國別</th>
+            <th>作物</th>
+            <th class="num">預警分數</th>
+            <th class="num">IRAC 多樣性</th>
+            <th class="num">可用碼數</th>
+            <th>建議</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in pesticide_summary.rotation_alerts %}
+            <tr>
+              <td><a href="/detail?crop={{ row.crop | urlencode }}">{{ row.crop }}</a></td>
+              <td class="num mono">{{ "{:.1f}".format(row.rotation_alert_score) }}</td>
+              <td class="num mono">{{ "{:.1f}".format(row.irac_diversity) }}</td>
+              <td class="num mono">{{ row.coverage_irac_code_count }}</td>
+              <td>{{ row.action }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
+<section class="grid-two">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">來源分布</div>
+        <div class="panel-meta">觀察主要國外廠商或來源標記的結構。</div>
+      </div>
+    </div>
+    <div class="panel-body panel-body-tight">
+      <table class="data-table compact">
+        <thead>
+          <tr>
+            <th>來源 / 廠商</th>
             <th class="num">筆數</th>
           </tr>
         </thead>
@@ -68,13 +131,13 @@
   <article class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">撤銷與類別摘要</div>
-        <div class="panel-meta">支援風險監測與管理說明</div>
+        <div class="panel-title">撤銷與分類</div>
+        <div class="panel-meta">從撤銷狀態與農藥分類補足政策監測背景。</div>
       </div>
     </div>
     <div class="panel-body split-summary">
       <div>
-        <div class="section-label">撤銷 / 廢止</div>
+        <div class="section-label">撤銷 / 註銷</div>
         <table class="data-table compact">
           <thead>
             <tr>
@@ -93,11 +156,11 @@
         </table>
       </div>
       <div>
-        <div class="section-label">農藥類別</div>
+        <div class="section-label">農藥分類</div>
         <table class="data-table compact">
           <thead>
             <tr>
-              <th>類別</th>
+              <th>分類</th>
               <th class="num">筆數</th>
             </tr>
           </thead>
@@ -120,6 +183,7 @@
 <script>
   const iracDistribution = {{ pesticide_summary.irac_distribution | tojson }};
   const formDistribution = {{ pesticide_summary.form_distribution | tojson }};
+  const rotationAlerts = {{ pesticide_summary.rotation_alerts | tojson }};
 
   const iracChart = echarts.init(document.getElementById("irac-distribution-chart"));
   iracChart.setOption({
@@ -149,9 +213,28 @@
     }],
   });
 
+  const rotationChart = echarts.init(document.getElementById("rotation-alert-chart"));
+  rotationChart.setOption({
+    grid: { left: 88, right: 18, top: 12, bottom: 24 },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+    yAxis: {
+      type: "category",
+      data: rotationAlerts.map((row) => row.crop).reverse(),
+      axisTick: { show: false },
+    },
+    series: [{
+      type: "bar",
+      data: rotationAlerts.map((row) => row.rotation_alert_score).reverse(),
+      itemStyle: { color: "#b74e3a", borderRadius: [0, 3, 3, 0] },
+      barMaxWidth: 16,
+    }],
+  });
+
   window.addEventListener("resize", () => {
     iracChart.resize();
     formChart.resize();
+    rotationChart.resize();
   });
 </script>
 {% endblock %}

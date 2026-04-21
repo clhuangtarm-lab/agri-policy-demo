@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import config
 from ..services import queries
@@ -26,7 +25,6 @@ async def traceability_page(
     status_rows = queries.get_traceability_status_distribution()
     inspection_rows = queries.get_traceability_inspection_distribution(24)
     county_crop_rows = queries.get_traceability_county_crop_rows()
-    sample_rows = queries.get_traceability_sample_records(240)
 
     county_options = [row["county"] for row in county_rows]
     crop_options = [row["crop"] for row in crop_rows]
@@ -35,6 +33,11 @@ async def traceability_page(
     selected_county = county if county in county_options else (county_options[0] if county_options else "")
     selected_crop = crop if crop in crop_options else (crop_options[0] if crop_options else "")
     selected_status = status if status in status_options else (status_options[0] if status_options else "")
+    practice_profile = queries.get_traceability_practice_profile(
+        county=selected_county,
+        crop=selected_crop,
+        status=selected_status,
+    )
 
     traceability = {
         "summary": summary,
@@ -43,7 +46,7 @@ async def traceability_page(
         "statuses": status_rows,
         "inspections": inspection_rows,
         "county_crop_rows": county_crop_rows,
-        "sample_rows": sample_rows,
+        "practice_profile": practice_profile,
         "selected_county": selected_county,
         "selected_crop": selected_crop,
         "selected_status": selected_status,
@@ -53,7 +56,7 @@ async def traceability_page(
         "request": request,
         "active": "traceability",
         "page_title": "產銷履歷互動頁",
-        "page_subtitle": "整合履歷生產者、產品與檢驗結果，快速查看縣市與作物的履歷覆蓋輪廓。",
+        "page_subtitle": "整合履歷生產者、產品、狀態與檢驗結果，並用文字探勘示範栽培、防治與肥培分析。",
         "meta": config.PROJECT_META,
         "nav_items": config.NAV_ITEMS,
         "theme_logic": config.THEME_LOGIC,
@@ -76,3 +79,17 @@ async def traceability_records_api(
         limit=max(1, min(limit, 50)),
     )
     return {"rows": rows}
+
+
+@router.get("/traceability/api/practices", response_class=JSONResponse)
+async def traceability_practices_api(
+    county: str | None = None,
+    crop: str | None = None,
+    status: str | None = None,
+):
+    profile = queries.get_traceability_practice_profile(
+        county=county,
+        crop=crop,
+        status=status,
+    )
+    return profile
