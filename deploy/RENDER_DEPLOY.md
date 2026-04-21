@@ -1,39 +1,34 @@
 # Render Deployment Notes
 
-## Root cause of the current failure
+## Recommended approach
 
-Render's native Python runtime currently defaults to Python `3.14.3` for newly created services.
-This project pins `rapidfuzz==3.10.1`, which does not build cleanly in that environment.
+Use Render's native **Python** web service and deploy this branch as a **new service**:
 
-## Recommended fix
+- Repository: `clhuangtarm-lab/agri-policy-demo`
+- Branch: `interactive-traceability-v03`
+- Suggested service name: `agri-policy-demo-interactive`
 
-Use Render's Python runtime, but pin Python to `3.11.11`.
+This repo now includes `render.yaml`, so you can also deploy it through Render Blueprint with the same settings pre-filled.
 
-This repository includes a `.python-version` file with:
+## Important runtime notes
 
-```text
-3.11.11
-```
+- Python must be pinned to `3.11.11`
+- Do **not** run `python -m etl.build_db` on Render
+- The deployed app should use the initialized SQLite file already committed in `data/demo.db`
 
-You can also set the same value in Render as:
+This repository includes:
 
-```text
-PYTHON_VERSION=3.11.11
-```
+- `.python-version` = `3.11.11`
+- `render.yaml`
+- initialized `data/demo.db`
 
-## Important note about Docker
-
-If you create a **Python** service on Render, Render ignores this repo's `Dockerfile`.
-If you want Render to use the `Dockerfile`, create a **Docker** service instead.
-
-## Native Python runtime settings
+## Render settings
 
 - Runtime: `Python`
 - Build command:
 
 ```bash
 pip install -r requirements.txt
-python -m etl.build_db
 ```
 
 - Start command:
@@ -42,7 +37,53 @@ python -m etl.build_db
 uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-## Docker runtime settings
+- Health check path:
 
-If you prefer not to depend on Render's Python version selection, create a **Docker** service.
-In that case Render will use the project's `Dockerfile`, which already starts from `python:3.11-slim`.
+```text
+/healthz
+```
+
+## Environment variables
+
+Set these values in Render if they are not auto-populated from `render.yaml`:
+
+```text
+PYTHON_VERSION=3.11.11
+DATABASE_PATH=/opt/render/project/src/data/demo.db
+```
+
+## Why ETL should not run on Render
+
+The ETL builder depends on raw source files that are not guaranteed to exist in the Render runtime environment.
+To avoid `no such table` or missing-file failures, the deployment should use the prebuilt SQLite database committed to the repo.
+
+## Create a new Render service
+
+### Option A: Blueprint
+
+1. In Render, choose `New +`
+2. Select `Blueprint`
+3. Connect the repository `clhuangtarm-lab/agri-policy-demo`
+4. Choose branch `interactive-traceability-v03`
+5. Render will read `render.yaml`
+6. Create the new service `agri-policy-demo-interactive`
+
+### Option B: Manual Web Service
+
+1. In Render, choose `New +`
+2. Select `Web Service`
+3. Connect `clhuangtarm-lab/agri-policy-demo`
+4. Choose branch `interactive-traceability-v03`
+5. Enter the settings listed above
+
+## Expected result
+
+After deploy, these routes should return `200`:
+
+- `/`
+- `/theme1/map`
+- `/theme3/coverage`
+- `/scenario`
+- `/traceability`
+- `/composite`
+- `/healthz`
