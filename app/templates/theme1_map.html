@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% block title %}縣市風險地圖{% endblock %}
 {% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">方法註記</div>
+      <div class="panel-meta">主題一把空間風險從地圖瀏覽升級為政策優先排序。</div>
+    </div>
+  </div>
+  <div class="panel-body method-note">
+    <p>加權暴露：以鄉鎮作物面積乘上作物高風險比率後加總，適合比較縣市與鄉鎮相對治理壓力，不代表田間實測值。</p>
+    <p>地圖底色：代表縣市整體暴露強度；地圖氣泡：代表種植量體，避免只看到顏色卻忽略政策影響規模。</p>
+    <p>優先矩陣：以暴露密度與總暴露交叉判斷示範場域，高右上象限代表高壓力且需優先介入的縣市。</p>
+  </div>
+</section>
+
 <section class="grid-main">
   <article class="panel">
     <div class="panel-head">
@@ -23,7 +37,16 @@
           {% for row in map_data.counties %}
             {% set geo = map_data.county_geo.get(row.county_key) %}
             {% if geo %}
-              <g class="county-node" data-county-key="{{ row.county_key }}" data-exposure="{{ row.exposure }}">
+              <g class="county-node" data-county-key="{{ row.county_key }}" data-exposure="{{ row.exposure }}" data-area="{{ row.area_ha }}">
+                <circle
+                  class="county-bubble"
+                  cx="{{ geo.cx }}"
+                  cy="{{ geo.cy }}"
+                  r="8"
+                  fill="rgba(45,90,61,0.16)"
+                  stroke="rgba(45,90,61,0.28)"
+                  stroke-width="1"
+                />
                 <rect
                   class="county-fill"
                   x="{{ geo.cx - geo.size / 2 }}"
@@ -33,19 +56,26 @@
                   rx="3"
                   ry="3"
                 />
-                <text class="county-label" x="{{ geo.cx }}" y="{{ geo.cy + geo.size / 2 + 12 }}">{{ row.county }}</text>
+                <text class="county-label" x="{{ geo.cx }}" y="{{ geo.cy + geo.size / 2 + 14 }}">{{ row.county }}</text>
               </g>
             {% endif %}
           {% endfor %}
         </svg>
       </div>
       <div class="legend-row">
-        <span>低暴露</span>
+        <span>底色：低暴露</span>
         <span class="legend-swatch swatch-1"></span>
         <span class="legend-swatch swatch-2"></span>
         <span class="legend-swatch swatch-3"></span>
         <span class="legend-swatch swatch-4"></span>
         <span>高暴露</span>
+      </div>
+      <div class="legend-row">
+        <span>氣泡：小量體</span>
+        <span class="legend-swatch" style="width: 10px; height: 10px; border-radius: 50%; background: rgba(45,90,61,0.18);"></span>
+        <span class="legend-swatch" style="width: 16px; height: 16px; border-radius: 50%; background: rgba(45,90,61,0.18);"></span>
+        <span class="legend-swatch" style="width: 24px; height: 24px; border-radius: 50%; background: rgba(45,90,61,0.18);"></span>
+        <span>大量體</span>
       </div>
     </div>
   </article>
@@ -67,6 +97,10 @@
         <div class="stat-card">
           <div class="stat-label">加權暴露</div>
           <div class="stat-value" id="selected-county-exposure">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">暴露密度</div>
+          <div class="stat-value" id="selected-county-density">-</div>
         </div>
       </div>
 
@@ -106,11 +140,37 @@
   </article>
 </section>
 
+<section class="grid-main">
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">縣市量體氣泡圖</div>
+        <div class="panel-meta">X 軸為總種植面積、Y 軸為加權暴露、泡泡大小為暴露密度；點擊可同步切換縣市。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="county-bubble-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">示範場域優先矩陣</div>
+        <div class="panel-meta">右上象限代表高暴露、高密度且需要優先導入示範場域與巡查資源。</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="county-priority-chart" class="chart chart-medium"></div>
+    </div>
+  </article>
+</section>
+
 <section class="panel">
   <div class="panel-head">
     <div>
       <div class="panel-title">全縣市暴露排序</div>
-      <div class="panel-meta">主題一對應的治理優先順序，可銜接標案中的示範場域挑選</div>
+      <div class="panel-meta">主題一對應的治理優先順序，可銜接標案中的示範場域挑選。</div>
     </div>
   </div>
   <div class="panel-body">
@@ -127,6 +187,7 @@
   const countyLookup = Object.fromEntries(counties.map((row) => [row.county_key, row]));
   const selectedCountyKey = {{ map_data.selected_county_key | tojson }};
   const maxExposure = Math.max(...counties.map((row) => row.exposure), 1);
+  const maxArea = Math.max(...counties.map((row) => row.area_ha), 1);
 
   function formatNumber(value, digits = 1) {
     return Number(value || 0).toLocaleString("zh-TW", {
@@ -143,9 +204,41 @@
     return "#8ca84f";
   }
 
+  function densityValue(row) {
+    if (!row || !row.area_ha) return 0;
+    return Number(((row.exposure / row.area_ha) * 100).toFixed(2));
+  }
+
+  function bubbleRadius(area) {
+    return 8 + (Math.sqrt(Number(area || 0) / maxArea) * 20);
+  }
+
+  function median(values) {
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    if (!sorted.length) return 0;
+    return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+  }
+
+  const countyMetrics = counties.map((row) => ({
+    ...row,
+    density: densityValue(row),
+  }));
+  const medianDensity = median(countyMetrics.map((row) => row.density));
+  const medianExposure = median(countyMetrics.map((row) => row.exposure));
+
   document.querySelectorAll(".county-node").forEach((node) => {
     const exposure = Number(node.dataset.exposure || 0);
-    node.querySelector(".county-fill").setAttribute("fill", riskColor(exposure));
+    const area = Number(node.dataset.area || 0);
+    const fill = node.querySelector(".county-fill");
+    const bubble = node.querySelector(".county-bubble");
+    fill.setAttribute("fill", riskColor(exposure));
+    bubble.setAttribute("r", String(bubbleRadius(area)));
+    bubble.setAttribute("fill", riskColor(exposure));
+    bubble.setAttribute("fill-opacity", "0.18");
+    bubble.setAttribute("stroke", riskColor(exposure));
+    bubble.setAttribute("stroke-opacity", "0.36");
+    node.style.cursor = "pointer";
     node.addEventListener("click", () => renderCounty(node.dataset.countyKey));
   });
 
@@ -154,12 +247,17 @@
     if (!county) return;
 
     document.querySelectorAll(".county-node").forEach((node) => {
-      node.classList.toggle("selected", node.dataset.countyKey === county.county_key);
+      const isSelected = node.dataset.countyKey === county.county_key;
+      node.classList.toggle("selected", isSelected);
+      const bubble = node.querySelector(".county-bubble");
+      bubble.setAttribute("stroke-width", isSelected ? "2.6" : "1");
+      bubble.setAttribute("fill-opacity", isSelected ? "0.28" : "0.18");
     });
 
     document.getElementById("selected-county-name").textContent = county.county;
     document.getElementById("selected-county-area").textContent = `${formatNumber(county.area_ha)} 公頃`;
     document.getElementById("selected-county-exposure").textContent = formatNumber(county.exposure);
+    document.getElementById("selected-county-density").textContent = `${formatNumber(densityValue(county), 2)} / 百公頃`;
     document.getElementById("selected-county-link").href = `/theme1/map?county=${encodeURIComponent(county.county)}`;
 
     const cropContainer = document.getElementById("selected-county-top-crops");
@@ -204,8 +302,8 @@
     }
   }
 
-  const chart = echarts.init(document.getElementById("county-risk-chart"));
-  chart.setOption({
+  const rankChart = echarts.init(document.getElementById("county-risk-chart"));
+  rankChart.setOption({
     grid: { left: 90, right: 18, top: 10, bottom: 24 },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     xAxis: {
@@ -227,7 +325,105 @@
       barMaxWidth: 16,
     }],
   });
-  window.addEventListener("resize", () => chart.resize());
+
+  const bubbleChart = echarts.init(document.getElementById("county-bubble-chart"));
+  bubbleChart.setOption({
+    grid: { left: 52, right: 28, top: 20, bottom: 42 },
+    tooltip: {
+      formatter(params) {
+        const row = params.data.row;
+        return `
+          <strong>${row.county}</strong><br/>
+          種植面積：${formatNumber(row.area_ha)} 公頃<br/>
+          加權暴露：${formatNumber(row.exposure)}<br/>
+          暴露密度：${formatNumber(row.density, 2)} / 百公頃
+        `;
+      },
+    },
+    xAxis: {
+      name: "總種植面積",
+      type: "value",
+      splitLine: { lineStyle: { color: "#d9d7c5" } },
+      axisLabel: { formatter: (value) => formatNumber(value, 0) },
+    },
+    yAxis: {
+      name: "加權暴露",
+      type: "value",
+      splitLine: { lineStyle: { color: "#d9d7c5" } },
+    },
+    series: [{
+      type: "scatter",
+      data: countyMetrics.map((row) => ({
+        value: [row.area_ha, row.exposure, row.density],
+        name: row.county,
+        row,
+        symbolSize: 16 + row.density * 1.1,
+        itemStyle: { color: riskColor(row.exposure), opacity: 0.82 },
+        label: row.exposure >= medianExposure ? { show: true, formatter: row.county, position: "top", color: "#3c4a34" } : undefined,
+      })),
+    }],
+  });
+  bubbleChart.on("click", (params) => renderCounty(params.data.row.county_key));
+
+  const priorityChart = echarts.init(document.getElementById("county-priority-chart"));
+  priorityChart.setOption({
+    grid: { left: 52, right: 24, top: 20, bottom: 42 },
+    tooltip: {
+      formatter(params) {
+        const row = params.data.row;
+        return `
+          <strong>${row.county}</strong><br/>
+          暴露密度：${formatNumber(row.density, 2)} / 百公頃<br/>
+          加權暴露：${formatNumber(row.exposure)}<br/>
+          總面積：${formatNumber(row.area_ha)} 公頃
+        `;
+      },
+    },
+    xAxis: {
+      name: "暴露密度",
+      type: "value",
+      splitLine: { lineStyle: { color: "#d9d7c5" } },
+    },
+    yAxis: {
+      name: "加權暴露",
+      type: "value",
+      splitLine: { lineStyle: { color: "#d9d7c5" } },
+    },
+    series: [{
+      type: "scatter",
+      data: countyMetrics.map((row) => ({
+        value: [row.density, row.exposure, row.area_ha],
+        name: row.county,
+        row,
+        symbolSize: 14 + Math.sqrt(row.area_ha / maxArea) * 26,
+        itemStyle: { color: riskColor(row.exposure), opacity: 0.8 },
+        label: row.density >= medianDensity && row.exposure >= medianExposure
+          ? { show: true, formatter: row.county, position: "top", color: "#3c4a34" }
+          : undefined,
+      })),
+      markLine: {
+        symbol: "none",
+        lineStyle: { color: "#8e9174", type: "dashed" },
+        data: [
+          { xAxis: medianDensity },
+          { yAxis: medianExposure },
+        ],
+      },
+    }],
+    graphic: [
+      { type: "text", left: "16%", top: "10%", style: { text: "預防補強", fill: "#8e9174", font: "12px sans-serif" } },
+      { type: "text", right: "14%", top: "10%", style: { text: "優先介入", fill: "#b74e3a", font: "12px sans-serif" } },
+      { type: "text", left: "16%", bottom: "14%", style: { text: "基線追蹤", fill: "#8e9174", font: "12px sans-serif" } },
+      { type: "text", right: "10%", bottom: "14%", style: { text: "密集監測", fill: "#c88544", font: "12px sans-serif" } },
+    ],
+  });
+  priorityChart.on("click", (params) => renderCounty(params.data.row.county_key));
+
+  window.addEventListener("resize", () => {
+    rankChart.resize();
+    bubbleChart.resize();
+    priorityChart.resize();
+  });
 
   renderCounty(selectedCountyKey);
 </script>
