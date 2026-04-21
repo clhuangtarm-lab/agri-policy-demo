@@ -54,10 +54,10 @@
     </div>
 
     <div class="presentation-note">
-      <div class="presentation-note-title">簡報模式</div>
-      <div class="presentation-note-body"><strong>第一句：</strong>先說這是政策沙盤，不是預測真實成效，而是比較介入方向的工具。</div>
-      <div class="presentation-note-body"><strong>第二句：</strong>再看政策前後比較圖，交代哪個策略對暴露、覆蓋與 IRAC 韌性改善最明顯。</div>
-      <div class="presentation-note-body"><strong>第三句：</strong>最後用跨縣市比較與優先鄉鎮清單，把模擬結果轉成執行順序。</div>
+      <div class="presentation-note-title">情境解讀</div>
+      <div class="presentation-note-body"><strong>模擬定位：</strong>本頁用於比較不同政策方向的相對變化，不作為真實成效預測。</div>
+      <div class="presentation-note-body"><strong>策略差異：</strong>政策前後比較圖可協助觀察不同策略對暴露、覆蓋與 IRAC 韌性的改善幅度。</div>
+      <div class="presentation-note-body"><strong>執行連結：</strong>跨縣市比較與優先鄉鎮名單可進一步轉為場域排序與執行優先序。</div>
     </div>
   </div>
 </section>
@@ -100,7 +100,7 @@
     </div>
     <div class="panel-body">
       <div id="scenario-scorecard-chart" class="chart chart-medium"></div>
-      <div class="figure-caption"><strong>圖說：</strong>三個指標若同步上升，表示該策略在風險降低與資材韌性上具一致正向效果。</div>
+      <div class="figure-caption"><strong>解讀：</strong>三個指標若同步改善，表示該策略在風險降低與資材韌性上呈現一致方向。</div>
     </div>
   </article>
 
@@ -113,7 +113,7 @@
     </div>
     <div class="panel-body">
       <div id="scenario-irac-chart" class="chart chart-medium"></div>
-      <div class="figure-caption"><strong>圖說：</strong>情境後分布越均衡，越能作為 MOA 輪替改善的展示型證據。</div>
+      <div class="figure-caption"><strong>解讀：</strong>情境後分布越均衡，代表作用機制分散程度越高，可作為輪替改善的展示型指標。</div>
     </div>
   </article>
 </section>
@@ -129,7 +129,7 @@
     </div>
     <div class="panel-body">
       <div id="scenario-exposure-chart" class="chart chart-large"></div>
-      <div class="figure-caption"><strong>圖說：</strong>可直接比較哪個縣市降幅最大，讓政策討論從原則落到場域優先序。</div>
+      <div class="figure-caption"><strong>解讀：</strong>這張圖可直接比較各縣市的變化幅度，協助把策略討論連結到場域優先序。</div>
     </div>
   </article>
 
@@ -239,6 +239,23 @@
     return Math.min(max, Math.max(min, value));
   }
 
+  function renderEmptyState(chart, message) {
+    chart.clear();
+    chart.setOption({
+      graphic: {
+        type: "text",
+        left: "center",
+        top: "middle",
+        style: {
+          text: message,
+          fill: "#6a6f5f",
+          font: "13px sans-serif",
+          textAlign: "center",
+        },
+      },
+    });
+  }
+
   function getEffectRatio(strategy, intensity) {
     return (strategy.effect || 0) * (intensity / 100);
   }
@@ -323,6 +340,41 @@
       })
       .sort((a, b) => b.weightedExposure - a.weightedExposure)
       .slice(0, 8);
+  }
+
+  function getScenarioScorecard(cropRow, selectedCountyCrop, scenarioExposure, coverageIndex, baselineCoverage, resilience, baselineResilience) {
+    const sameCropRows = getCountyCropRows(cropRow.crop);
+    const cropExposureMax = Math.max(
+      ...sameCropRows.map((row) => Number(row.exposure || 0)),
+      Number(selectedCountyCrop.exposure || 0),
+      1,
+    );
+    const resilienceMax = Math.max(
+      ...crops.map((row) => Number(row.irac_diversity || 0)),
+      Number(resilience || 0),
+      Number(baselineResilience || 0),
+      1,
+    );
+
+    const baselineExposureScore = clamp((1 - (Number(selectedCountyCrop.exposure || 0) / cropExposureMax)) * 100, 0, 100);
+    const scenarioExposureScore = clamp((1 - (Number(scenarioExposure || 0) / cropExposureMax)) * 100, 0, 100);
+    const baselineCoverageScore = clamp(Number(baselineCoverage || 0), 0, 100);
+    const scenarioCoverageScore = clamp(Number(coverageIndex || 0), 0, 100);
+    const baselineResilienceScore = clamp((Number(baselineResilience || 0) / resilienceMax) * 100, 0, 100);
+    const scenarioResilienceScore = clamp((Number(resilience || 0) / resilienceMax) * 100, 0, 100);
+
+    return {
+      baseline: [
+        Number(baselineExposureScore.toFixed(1)),
+        Number(baselineCoverageScore.toFixed(1)),
+        Number(baselineResilienceScore.toFixed(1)),
+      ],
+      scenario: [
+        Number(scenarioExposureScore.toFixed(1)),
+        Number(scenarioCoverageScore.toFixed(1)),
+        Number(scenarioResilienceScore.toFixed(1)),
+      ],
+    };
   }
 
   function getRecommendations(countyRow, cropRow, selectedCountyCrop, strategy, intensity, priorityRows, coverageIndex, resilience) {
@@ -429,73 +481,81 @@
       townshipBody.appendChild(tr);
     });
 
-    exposureChart.setOption({
-      grid: { left: 88, right: 18, top: 16, bottom: 24 },
-      legend: { top: 0 },
-      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-      xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
-      yAxis: {
-        type: "category",
-        data: exposureRows.map((row) => row.county).reverse(),
-        axisTick: { show: false },
-      },
-      series: [
-        {
-          name: "基線",
-          type: "bar",
-          data: exposureRows.map((row) => row.exposure).reverse(),
-          itemStyle: { color: "#b8b69e", borderRadius: [0, 3, 3, 0] },
-          barMaxWidth: 14,
+    if (!exposureRows.length) {
+      renderEmptyState(exposureChart, "查無此作物的縣市情境資料");
+    } else {
+      exposureChart.setOption({
+        grid: { left: 88, right: 18, top: 16, bottom: 24, containLabel: true },
+        legend: { top: 0 },
+        tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+        xAxis: { type: "value", splitLine: { lineStyle: { color: "#d9d7c5" } } },
+        yAxis: {
+          type: "category",
+          data: exposureRows.map((row) => row.county).reverse(),
+          axisTick: { show: false },
         },
-        {
-          name: "情境後",
-          type: "bar",
-          data: exposureRows.map((row) => {
-            const ratio = row.county === state.county ? effectRatio : effectRatio * 0.45;
-            return Number((row.exposure * (1 - ratio)).toFixed(1));
-          }).reverse(),
-          itemStyle: {
-            color: (params) => exposureRows[exposureRows.length - 1 - params.dataIndex].county === state.county ? "#2d5a3d" : "#8ca84f",
-            borderRadius: [0, 3, 3, 0],
+        series: [
+          {
+            name: "基線",
+            type: "bar",
+            data: exposureRows.map((row) => row.exposure).reverse(),
+            itemStyle: { color: "#b8b69e", borderRadius: [0, 3, 3, 0] },
+            barMaxWidth: 14,
           },
-          barMaxWidth: 14,
-        },
-      ],
-    });
+          {
+            name: "情境後",
+            type: "bar",
+            data: exposureRows.map((row) => {
+              const ratio = row.county === state.county ? effectRatio : effectRatio * 0.45;
+              return Number((row.exposure * (1 - ratio)).toFixed(1));
+            }).reverse(),
+            itemStyle: {
+              color: (params) => exposureRows[exposureRows.length - 1 - params.dataIndex].county === state.county ? "#2d5a3d" : "#8ca84f",
+              borderRadius: [0, 3, 3, 0],
+            },
+            barMaxWidth: 14,
+          },
+        ],
+      });
+    }
 
+    const scorecard = getScenarioScorecard(
+      cropRow,
+      selectedCountyCrop,
+      scenarioExposure,
+      coverageIndex,
+      baselineCoverage,
+      resilience,
+      baselineResilience,
+    );
     scorecardChart.setOption({
-      grid: { left: 110, right: 18, top: 16, bottom: 24 },
+      grid: { left: 110, right: 18, top: 16, bottom: 24, containLabel: true },
       legend: { top: 0 },
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
       xAxis: {
         type: "value",
+        min: 0,
+        max: 100,
         splitLine: { lineStyle: { color: "#d9d7c5" } },
+        axisLabel: { formatter: (value) => `${value}%` },
       },
       yAxis: {
         type: "category",
-        data: ["暴露值", "覆蓋指數", "IRAC 韌性"],
+        data: ["風險控制", "覆蓋指數", "IRAC 韌性"],
         axisTick: { show: false },
       },
       series: [
         {
           name: "基線",
           type: "bar",
-          data: [
-            selectedCountyCrop.exposure,
-            baselineCoverage,
-            baselineResilience,
-          ],
+          data: scorecard.baseline,
           itemStyle: { color: "#b8b69e", borderRadius: [0, 3, 3, 0] },
           barMaxWidth: 16,
         },
         {
           name: "情境後",
           type: "bar",
-          data: [
-            scenarioExposure,
-            coverageIndex,
-            resilience,
-          ],
+          data: scorecard.scenario,
           itemStyle: { color: "#4a7a8c", borderRadius: [0, 3, 3, 0] },
           barMaxWidth: 16,
         },
@@ -503,39 +563,43 @@
     });
 
     const scenarioProfile = buildScenarioProfile(iracProfiles[state.crop] || [], strategy, state.intensity);
-    iracChart.setOption({
-      grid: { left: 48, right: 18, top: 16, bottom: 36 },
-      legend: { top: 0 },
-      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-      xAxis: {
-        type: "category",
-        data: scenarioProfile.map((row) => row.code),
-        axisLabel: { interval: 0, rotate: scenarioProfile.length > 5 ? 24 : 0 },
-      },
-      yAxis: {
-        type: "value",
-        axisLabel: {
-          formatter: (value) => `${Math.round(value * 100)}%`,
+    if (!scenarioProfile.length) {
+      renderEmptyState(iracChart, "此作物目前沒有可用的 IRAC 結構資料");
+    } else {
+      iracChart.setOption({
+        grid: { left: 48, right: 18, top: 16, bottom: 36, containLabel: true },
+        legend: { top: 0 },
+        tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+        xAxis: {
+          type: "category",
+          data: scenarioProfile.map((row) => row.code),
+          axisLabel: { interval: 0, rotate: scenarioProfile.length > 5 ? 24 : 0 },
         },
-        splitLine: { lineStyle: { color: "#d9d7c5" } },
-      },
-      series: [
-        {
-          name: "基線",
-          type: "bar",
-          data: scenarioProfile.map((row) => Number(row.baseline_share.toFixed(4))),
-          itemStyle: { color: "#c88544", borderRadius: [3, 3, 0, 0] },
-          barMaxWidth: 22,
+        yAxis: {
+          type: "value",
+          axisLabel: {
+            formatter: (value) => `${Math.round(value * 100)}%`,
+          },
+          splitLine: { lineStyle: { color: "#d9d7c5" } },
         },
-        {
-          name: "情境後",
-          type: "bar",
-          data: scenarioProfile.map((row) => Number(row.scenario_share.toFixed(4))),
-          itemStyle: { color: "#4a7a8c", borderRadius: [3, 3, 0, 0] },
-          barMaxWidth: 22,
-        },
-      ],
-    });
+        series: [
+          {
+            name: "基線",
+            type: "bar",
+            data: scenarioProfile.map((row) => Number(row.baseline_share.toFixed(4))),
+            itemStyle: { color: "#c88544", borderRadius: [3, 3, 0, 0] },
+            barMaxWidth: 22,
+          },
+          {
+            name: "情境後",
+            type: "bar",
+            data: scenarioProfile.map((row) => Number(row.scenario_share.toFixed(4))),
+            itemStyle: { color: "#4a7a8c", borderRadius: [3, 3, 0, 0] },
+            barMaxWidth: 22,
+          },
+        ],
+      });
+    }
 
     syncUrl();
   }
